@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.env.local
+
+# Pytest / coverage / Playwright
+.pytest_cache/
+.playwright-cli/
+.coverage
+htmlcov/
+.tox/
+
+# Runtime-generated data / reports
+*.db
+*.sqlite
+*.sqlite3
+eval_reports/
+data/baseline_embeddings/
+data/canary_probes/
+data/synthetic_degradation/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/.env.local
+frontend/.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Internal planning / spec docs — not for production repo
+Docs/

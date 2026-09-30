@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sentence-transformers
+numpy
+apscheduler
+sqlalchemy
+pydantic
+pydantic-settings
+pyyaml
+slowapi
+groq
+google-generativeai
+python-dotenv
+pytest
+pytest-asyncio
+httpx
