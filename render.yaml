@@ -3,13 +3,15 @@ services:
     name: driftwatch-monitor
     runtime: python
     plan: free
-    # CPU-only torch (the default Linux wheel bundles CUDA, ~2 GB, slow to
-    # build and too big for the 512 MB free instance), then pre-download the
-    # embedding model at build time so a cold start never waits on Hugging Face.
+    # Free tier = 512 MB RAM, too small for torch. requirements-lean.txt swaps
+    # sentence-transformers for fastembed (ONNX, same all-MiniLM-L6-v2 model)
+    # and the model is pre-downloaded at build so cold starts never wait on it.
+    # If you move to a paid instance, use the torch path instead:
+    #   pip install torch --index-url https://download.pytorch.org/whl/cpu &&
+    #   pip install -r requirements.txt   (and drop DRIFTWATCH_EMBEDDER below)
     buildCommand: >-
-      pip install torch --index-url https://download.pytorch.org/whl/cpu &&
-      pip install -r requirements.txt &&
-      python -c "from sentence_transformers import SentenceTransformer as S; S('all-MiniLM-L6-v2')"
+      pip install -r requirements-lean.txt &&
+      python -c "from fastembed import TextEmbedding as T; T('sentence-transformers/all-MiniLM-L6-v2')"
     startCommand: uvicorn monitor.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/ready
     # Render's free plan doesn't support persistent disks (paid-only). The SQLite
@@ -17,8 +19,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: HF_HOME
-        value: /opt/render/project/.hf-cache
+      - key: DRIFTWATCH_EMBEDDER
+        value: onnx
+      - key: FASTEMBED_CACHE_PATH
+        value: /opt/render/project/.fastembed-cache
       - key: GROQ_API_KEY
         sync: false
       - key: GOOGLE_API_KEY

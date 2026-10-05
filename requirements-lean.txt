@@ -1,0 +1,17 @@
+# Render free tier (512 MB): same as requirements.txt but fastembed (ONNX)
+# replaces sentence-transformers/torch. Set DRIFTWATCH_EMBEDDER=onnx.
+fastapi
+uvicorn[standard]
+fastembed
+numpy
+apscheduler
+sqlalchemy
+pydantic
+pydantic-settings
+pyyaml
+slowapi
+groq
+google-generativeai
+python-dotenv
+pyjwt
+httpx

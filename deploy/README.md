@@ -4,7 +4,7 @@ Target: monitor API on **Render** (native Python runtime, no Docker), dashboard 
 
 ## 1. Monitor on Render
 
-`deploy/render.yaml` is the Blueprint. Create the service from it, then fill the `sync: false` secrets in the Render dashboard:
+`render.yaml` (repo root) is the Blueprint. Render → New → Blueprint → pick the repo, then then fill the `sync: false` secrets in the Render dashboard:
 
 | Variable | Value |
 |---|---|
@@ -17,12 +17,14 @@ Target: monitor API on **Render** (native Python runtime, no Docker), dashboard 
 
 Health: `/api/health` (liveness), `/api/ready` (DB reachable; Render's health check uses this).
 
+Memory: the blueprint installs `requirements-lean.txt` and sets `DRIFTWATCH_EMBEDDER=onnx` (fastembed/ONNX, same MiniLM model, no torch) so it fits 512 MB. If it still runs out of memory, use Render Starter (~$7/mo) or the Docker image below.
+
 Free-tier caveats: 512 MB RAM, service sleeps after ~15 min idle (cold start 20–30 s), SQLite is ephemeral, and quotas are in-process per instance.
 
 ## 2. Dashboard on Vercel
 
 1. New project → import the repo.
-2. **Root Directory:** `P2-DriftWatch/frontend`. Framework: Next.js (auto-detected). No Dockerfile needed.
+2. **Root Directory:** `frontend`. Framework: Next.js (auto-detected). No Dockerfile needed.
 3. Environment variables (Production and Preview):
 
 | Variable | Value |
@@ -40,7 +42,15 @@ Never put `SUPABASE_JWT_SECRET`, `GROQ_API_KEY`, or any service-role key in Verc
 3. Deploy Vercel with the Render URL. Copy the Vercel origin back into Render's `DRIFTWATCH_CORS_ORIGINS`, then redeploy Render.
 4. Smoke test: open the dashboard, run a scenario, sign in at `/auth/sign-in`, open `/admin`.
 
-## Not used
+## Optional: Docker (local test / self-hosting)
 
-- `deploy/huggingface_space/` (Docker-based Hugging Face Space). Superseded by Vercel. Not deleted; remove it once the Vercel dashboard is confirmed working.
-- Docker is not part of either deployment target.
+Not part of the Render+Vercel deploy. Run from the repo root:
+
+```powershell
+docker build -f deploy/docker/backend.Dockerfile -t dw-backend .
+docker run --rm -p 7860:7860 --env-file .env dw-backend
+docker build -f deploy/docker/frontend.Dockerfile --build-arg NEXT_PUBLIC_MONITOR_API_URL=http://localhost:7860 -t dw-ui .
+docker run --rm -p 3000:3000 dw-ui
+```
+
+The backend image uses torch and needs ~1 GB RAM. Hugging Face Docker Spaces need a paid plan, so they are not used.

@@ -1,6 +1,6 @@
-# FastAPI monitor for a Hugging Face Docker Space. Space repo root must hold
-# this Dockerfile plus monitor/ demo_bot/ data/ schemas/ requirements.txt
-# (deploy/push_space.sh assembles that).
+# Local/self-hosted image for the FastAPI monitor (e.g. an Oracle free VM).
+# Not used by the Render+Vercel deploy. Build context = repo root:
+#   docker build -f deploy/docker/backend.Dockerfile -t dw-backend .
 FROM python:3.11-slim
 RUN useradd -m -u 1000 user
 WORKDIR /app
@@ -16,4 +16,4 @@ RUN chown -R user:user /app
 USER user
 ENV DRIFTWATCH_DB_PATH=/app/data/driftwatch.sqlite3
 EXPOSE 7860
-CMD ["uvicorn", "monitor.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["sh", "-c", "uvicorn monitor.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

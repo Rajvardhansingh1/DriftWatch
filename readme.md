@@ -35,7 +35,7 @@ demo_bot/  → controllable Q&A bot (scenario hooks for the 3 degradations)
 monitor/   → FastAPI service: signal analyzers, combined scoring, SQLite rolling store
 frontend/  → Next.js dashboard: live charts, alert banner, scenario controls
 scripts/   → synthetic-degradation evaluation (detection latency, false-positive rate)
-deploy/    → Render (monitor) + Hugging Face Spaces (dashboard) configs
+deploy/    → deploy guide + optional Docker images; render.yaml (root) = Render blueprint
 ```
 
 The monitor is purely observational: it sits alongside the demo bot's traffic, never in front of it.
@@ -77,7 +77,7 @@ Runs labeled synthetic-degradation scenarios against the detector (evaluation-on
 | Component | Host |
 | --- | --- |
 | Monitor (FastAPI) | Render, free web service |
-| Dashboard (Next.js) | Hugging Face Spaces |
+| Dashboard (Next.js) | Vercel |
 | Rolling store | SQLite, ephemeral on Render's free tier |
 | LLM calls | Groq (primary), Gemini (backup) |
 

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # e2e/smoke runs so they never spend real provider quota (D-035).
     force_simulated: bool = Field(False, alias="DRIFTWATCH_FORCE_SIMULATED")
 
+    # "sentence-transformers" (torch, default) or "onnx" (fastembed, same model,
+    # ~5x less RAM - use on Render's 512 MB free tier).
+    embedder: str = Field("sentence-transformers", alias="DRIFTWATCH_EMBEDDER")
+
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
     google_api_key: str = Field("", alias="GOOGLE_API_KEY")
 

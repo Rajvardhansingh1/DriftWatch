@@ -1,0 +1,10 @@
+.git
+.env
+monitor
+demo_bot
+data
+Docs
+eval_reports
+tests
+frontend/node_modules
+frontend/.next

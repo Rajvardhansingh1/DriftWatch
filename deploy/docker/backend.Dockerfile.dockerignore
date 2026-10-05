@@ -1,0 +1,10 @@
+.git
+.env
+frontend
+Docs
+eval_reports
+tests
+**/node_modules
+**/__pycache__
+data/*.sqlite3*
+data/baseline_embeddings

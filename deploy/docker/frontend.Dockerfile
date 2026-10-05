@@ -1,6 +1,6 @@
-# Builds and runs the Next.js dashboard (frontend/) for Hugging Face
-# Spaces' Docker SDK. Build context must be the repo root so this can
-# COPY frontend/. See README.md in this directory for setup.
+# Local/self-hosted image for the Next.js dashboard (frontend/). Not used by
+# the Render+Vercel deploy. Build context = repo root:
+#   docker build -f deploy/docker/frontend.Dockerfile -t dw-ui .
 
 FROM node:20-slim AS builder
 WORKDIR /app

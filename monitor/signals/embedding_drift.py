@@ -10,10 +10,27 @@ _embedder = None
 def get_embedder():
     global _embedder
     if _embedder is None:
-        from sentence_transformers import SentenceTransformer
+        from monitor.config import settings
 
-        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        if settings.embedder == "onnx":
+            from fastembed import TextEmbedding
+
+            _embedder = _OnnxEmbedder(TextEmbedding("sentence-transformers/all-MiniLM-L6-v2"))
+        else:
+            from sentence_transformers import SentenceTransformer
+
+            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedder
+
+
+class _OnnxEmbedder:
+    """Gives fastembed the `.encode(list) -> array` shape SentenceTransformer has."""
+
+    def __init__(self, model):
+        self._model = model
+
+    def encode(self, texts):
+        return np.stack(list(self._model.embed(texts)))
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
