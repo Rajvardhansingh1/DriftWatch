@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://driftwatch.example/schemas/event.v1.json",
+  "title": "DriftWatch ingestion event envelope v1",
+  "description": "Language-neutral event contract published per Spec_Upgrade.md section 7.1 (Phase 1 deliverable: contract only, not yet wired to a live ingestion endpoint - that is Phase 4).",
+  "type": "object",
+  "required": ["schema_version", "event_id", "occurred_at", "source", "signal", "value"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": {
+      "type": "string",
+      "description": "Stable, collision-resistant identifier (UUID/ULID). Must remain stable across retries so cloud ingestion can dedupe."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp of when the underlying observation happened, client-assigned."
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp assigned by the receiving server, never trusted from the client."
+    },
+    "organization_id": { "type": ["string", "null"] },
+    "project_id": { "type": ["string", "null"] },
+    "environment": { "type": ["string", "null"] },
+    "runtime_id": { "type": ["string", "null"] },
+    "source": {
+      "type": "string",
+      "description": "Integration/source identifier, e.g. \"driftwatch-demo-bot\"."
+    },
+    "model_provider": { "type": ["string", "null"] },
+    "model_name": { "type": ["string", "null"] },
+    "request_id": { "type": ["string", "null"] },
+    "signal": {
+      "type": "string",
+      "enum": [
+        "embedding_drift",
+        "self_consistency",
+        "canary_accuracy",
+        "judge_trend",
+        "hallucination_score",
+        "combined_score"
+      ]
+    },
+    "value": { "type": "number" },
+    "meta": {
+      "type": "object",
+      "description": "Signal-dependent metadata. Must never contain raw prompt/response content unless the owning project has explicitly opted in to content capture."
+    },
+    "content_capture": {
+      "type": "boolean",
+      "default": false,
+      "description": "Explicit opt-in flag. False by default per Spec_Upgrade.md section 8.3 - metadata-only unless a project turns this on."
+    }
+  },
+  "additionalProperties": false
+}

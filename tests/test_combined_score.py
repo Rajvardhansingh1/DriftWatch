@@ -1,9 +1,11 @@
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from monitor.db.session import get_session, init_db
 from monitor.db.writer import read_signal_window, write_signal
 from monitor.scoring.combined_score import (
+    _DEFAULT_WEIGHTS,
     ScoringConfig,
     combine_signals,
     compute_combined_score,
@@ -116,3 +118,47 @@ def test_compute_combined_score_missing_signals_treated_as_zero_weight():
     write_signal(session, "embedding_drift", 0.1)
     result = compute_combined_score(session)
     assert 0.0 <= result.score <= 1.0
+
+
+def test_default_weights_have_not_silently_changed():
+    """Regression baseline (Spec_Upgrade.md Mandatory Supplement, Phase 1):
+    pins the exact default weights so an accidental edit to
+    _DEFAULT_WEIGHTS fails loudly here instead of only shifting downstream
+    alert behavior. Weights were empirically tuned (D-020/D-021) — any
+    intentional change must update this test AND be logged in decision.md,
+    not just pass silently."""
+    assert _DEFAULT_WEIGHTS == {
+        "embedding_drift": 0.45,
+        "self_consistency": 0.15,
+        "canary_accuracy": 0.15,
+        "judge_trend": 0.125,
+        "hallucination_score": 0.125,
+    }
+
+
+def test_combine_signals_regression_baseline_fixed_inputs():
+    """Snapshot of combine_signals() output for a fixed input set, with an
+    explicit ScoringConfig (independent of settings.alert_threshold/.env),
+    so this test's meaning can't drift if someone tunes the deployed
+    threshold. Any change to this expected score means either the weights
+    or the normalize/combine logic changed — must be an approved,
+    documented, evaluated decision (Spec_Upgrade.md §9.3/§22), not silent."""
+    fixed_values = {
+        "embedding_drift": 0.2,
+        "self_consistency": 0.3,
+        "canary_accuracy": 0.9,
+        "judge_trend": 0.8,
+        "hallucination_score": 0.4,
+    }
+    config = ScoringConfig(alert_threshold=0.5)
+    result = combine_signals(fixed_values, config=config)
+    assert result.contributions == {
+        "embedding_drift": 0.2,
+        "self_consistency": 0.3,
+        "canary_accuracy": pytest.approx(0.1),
+        "judge_trend": pytest.approx(0.2),
+        "hallucination_score": 0.4,
+    }
+    assert result.score == pytest.approx(0.225)
+    assert result.alert is False
+    assert result.triggering_signals == []

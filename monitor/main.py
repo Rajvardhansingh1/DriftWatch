@@ -20,6 +20,12 @@ from demo_bot import scenarios
 from demo_bot.bot import STRONG_MODEL, QABot
 from demo_bot.llm_client import get_default_client
 from demo_bot.simulated_client import SimulatedLLMClient
+from sqlalchemy import text
+
+from monitor import logging_redaction
+from monitor.admin.routes import router as admin_router
+from monitor.cloud.ingest_route import build_router as build_ingest_router
+from monitor.cloud.supabase_store import SupabaseSignalStore
 from monitor.config import settings
 from monitor.db.session import get_session, init_db
 from monitor.db.writer import read_signal_window
@@ -55,6 +61,8 @@ class QueryRequest(BaseModel):
 
 
 def get_llm_client():
+    if settings.force_simulated:
+        return SimulatedLLMClient()
     try:
         return get_default_client()
     except RuntimeError:
@@ -79,6 +87,8 @@ def create_app(
     probes=None,
     seed_baseline: bool = True,
 ) -> FastAPI:
+    logging_redaction.install()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Seeding makes real LLM calls when a real provider key is
@@ -113,9 +123,9 @@ def create_app(
     app = FastAPI(title="DriftWatch Monitor", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     limiter = Limiter(key_func=get_remote_address)
@@ -155,6 +165,27 @@ def create_app(
         # (D-025) here instead of only in server logs - a broken/expired
         # provider key would otherwise look identical to "just started".
         return {"status": "ok", "embedding_drift_active": bool(app.state.pipeline.baseline_texts)}
+
+    @app.get("/api/ready")
+    def ready():
+        # Readiness (spec 13.2): the DB must answer. Liveness stays /api/health.
+        session = None
+        try:
+            session = app.state.session_factory()
+            session.execute(text("select 1"))
+            return {"status": "ready"}
+        except Exception:
+            logger.exception("readiness check failed")
+            raise HTTPException(status_code=503, detail="database unavailable")
+        finally:
+            if session is not None:
+                session.close()
+
+    app.include_router(admin_router)
+    if settings.supabase_url and settings.supabase_anon_key:
+        app.include_router(
+            build_ingest_router(SupabaseSignalStore(settings.supabase_url, settings.supabase_anon_key))
+        )
 
     @app.get("/api/quota")
     def quota():

@@ -12,7 +12,7 @@ Five signals feed a combined drift score:
 | Self-consistency | Answer disagreement across repeated samples of the same query at temperature > 0 |
 | Canary probes | Accuracy on a fixed, known-answer prompt set run on a schedule |
 | LLM-as-judge trend | Rubric-scored sampled outputs, tracked as a trend rather than a single score |
-| Hallucination score | Claim-level entailment / self-consistency fallback, shared with Project 1 (SentinelAI) |
+| Hallucination score | Heuristic hallucination-risk proxy — token-overlap entailment when grounding context is supplied, self-consistency (answer agreement across samples) otherwise; not verified factual entailment. Shared with Project 1 (SentinelAI) |
 
 The five signals are combined into one weighted score; crossing a configurable threshold fires an alert naming the triggering signal(s).
 

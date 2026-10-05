@@ -11,6 +11,5 @@ slowapi
 groq
 google-generativeai
 python-dotenv
-pytest
-pytest-asyncio
+pyjwt
 httpx
