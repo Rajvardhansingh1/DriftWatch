@@ -8,7 +8,7 @@ import type {
   SignalSeries,
 } from "./types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_MONITOR_API_URL ?? "http://localhost:8000";
+const BASE_URL = (process.env.NEXT_PUBLIC_MONITOR_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 /** Network failure or the server itself erroring (5xx) - the server is unreachable/broken. */
 export class MonitorUnreachableError extends Error {}

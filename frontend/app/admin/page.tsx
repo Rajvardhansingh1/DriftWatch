@@ -6,7 +6,7 @@ import { getSupabaseClient, isCloudAuthConfigured } from "../../lib/supabase";
 
 // Display-only. Authorization is enforced by the monitor's /api/admin/status
 // (allowlist check); hiding this page is not a control.
-const MONITOR = process.env.NEXT_PUBLIC_MONITOR_API_URL ?? "http://localhost:8000";
+const MONITOR = (process.env.NEXT_PUBLIC_MONITOR_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 type State =
   | { kind: "loading" }
