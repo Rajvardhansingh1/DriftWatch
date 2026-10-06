@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { enabledFeatures, isLive } from "../lib/features";
-import { FAQ, HERO, HOW_TO_STEPS, KEYS, MODES, ROADMAP, SIGNALS } from "../app/(marketing)/content";
+import { FAQ, HERO, SITE, HOW_TO_STEPS, KEYS, MODES, ROADMAP, SIGNALS } from "../app/(marketing)/content";
 import { buildLd, serializeLd } from "../lib/seo/jsonld";
 
 const BANNED = [
@@ -69,4 +69,8 @@ test("serializeLd cannot break out of the script tag", () => {
   const out = serializeLd({ x: "</script><script>alert(1)</script>&" });
   assert.ok(!out.includes("<") && !out.includes(">") && !out.includes("&"));
   assert.equal(JSON.parse(out).x, "</script><script>alert(1)</script>&");
+});
+
+test("meta description fits a search snippet", () => {
+  assert.ok(SITE.description.length >= 120 && SITE.description.length <= 160, String(SITE.description.length));
 });

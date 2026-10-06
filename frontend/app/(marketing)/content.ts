@@ -4,7 +4,7 @@ export const SITE = {
   name: "DriftWatch",
   tagline: "Notice when your LLM app gets quietly worse.",
   description:
-    "DriftWatch is an LLM drift monitor. It scores five quality signals on a running LLM app and raises an alert when they move together. It shows that quality moved, not always why.",
+    "DriftWatch is an LLM drift monitor. It scores five quality signals on a running app and alerts when they move together. It shows quality moved, not always why.",
 };
 
 export const HERO = {
