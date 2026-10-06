@@ -56,3 +56,6 @@ logs/
 
 # Internal planning / spec docs — not for production repo
 Docs/
+
+# SDD scratch workspace
+.superpowers/
