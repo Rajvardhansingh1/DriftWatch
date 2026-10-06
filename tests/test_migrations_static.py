@@ -60,3 +60,23 @@ def test_0005_locks_down_signal_records():
     assert "grant insert (project_id, event_id, signal, value, meta, occurred_at)" in sql
     assert "create trigger signal_records_guard" in sql
     assert "audit_events_select_org_admin" in sql
+
+
+def test_0006_definer_functions_pin_empty_search_path():
+    sql = _sql("0006_api_keys_ingest.sql")
+    fns = re.findall(r"create function [\w.]+\(.*?\n\$\$;", sql, flags=re.S)
+    assert len(fns) >= 3
+    for fn in fns:
+        if "security definer" in fn:
+            assert "set search_path = ''" in fn, fn[:80]
+
+
+def test_0006_api_key_hash_is_never_client_selectable():
+    sql = _sql("0006_api_keys_ingest.sql")
+    grant = re.search(r"grant select \(([^)]*)\)\s+on public\.project_api_keys", sql)
+    assert grant and "key_hash" not in grant.group(1)
+
+
+def test_0006_ingest_event_is_the_only_anon_executable_function():
+    sql = _sql("0006_api_keys_ingest.sql")
+    assert re.findall(r"grant execute on function (public\.\w+)\([^)]*\) to anon", sql) == ["public.ingest_event"]
