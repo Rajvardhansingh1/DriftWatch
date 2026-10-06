@@ -3,12 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient, isCloudAuthConfigured } from "../../../lib/supabase";
+import { Turnstile } from "@/components/Turnstile";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [message, setMessage] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | undefined>();
 
   if (!isCloudAuthConfigured()) {
     return (
@@ -27,10 +29,14 @@ export default function SignInPage() {
     setStatus("loading");
     setMessage("");
     const supabase = getSupabaseClient()!;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    });
     if (error) {
       setStatus("error");
-      setMessage(error.message);
+      setMessage("That didn't work. Check your details, or your email for a confirmation link.");
       return;
     }
     setStatus("success");
@@ -57,6 +63,7 @@ export default function SignInPage() {
           onChange={(e) => setPassword(e.target.value)}
           className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
         />
+        <Turnstile onToken={setCaptchaToken} />
         <button
           type="submit"
           disabled={status === "loading"}
