@@ -10,18 +10,21 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@react-three/fiber": "^8.18.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.4",
     "clsx": "^2.1.1",
     "next": "15.5.25",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.15.4"
+    "recharts": "^2.15.4",
+    "three": "^0.169.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.13",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.169.0",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
