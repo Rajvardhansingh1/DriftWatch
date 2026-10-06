@@ -43,7 +43,12 @@ do $$ begin
   end if;
 end $$;
 
--- Unverified email cannot mint a key.
+-- Unverified email cannot mint a key. Make the user an org admin first (as the
+-- privileged role), so the email gate is the only thing that can reject the call.
+reset role;
+insert into public.organization_members (organization_id, user_id, role)
+  values (current_setting('test.org_a')::uuid, '33333333-3333-3333-3333-333333333333', 'admin');
+set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}', true);
 do $$ begin
@@ -69,6 +74,10 @@ begin
 
   begin perform public.ingest_event('dw_0000000000_' || repeat('0', 64), ev);
         raise exception 'FAIL: bad key accepted';
+  exception when sqlstate 'PT401' then null; end;
+
+  begin perform public.ingest_event(substr(k, 1, 14) || repeat('0', 64), ev);
+        raise exception 'FAIL: wrong secret accepted';
   exception when sqlstate 'PT401' then null; end;
 
   begin perform public.ingest_event(k, ev || '{"signal":"nope"}');
