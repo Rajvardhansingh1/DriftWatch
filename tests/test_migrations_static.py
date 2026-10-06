@@ -80,3 +80,20 @@ def test_0006_api_key_hash_is_never_client_selectable():
 def test_0006_ingest_event_is_the_only_anon_executable_function():
     sql = _sql("0006_api_keys_ingest.sql")
     assert re.findall(r"grant execute on function (public\.\w+)\([^)]*\) to anon", sql) == ["public.ingest_event"]
+
+
+def test_0007_has_retention_realtime_and_ping():
+    sql = _sql("0007_retention_realtime_ping.sql")
+    assert "create extension if not exists pg_cron" in sql
+    assert "cron.schedule(" in sql and "if exists (select 1 from pg_extension" not in sql
+    assert "create table public.signal_hourly" in sql
+    assert "revoke all on public.signal_hourly from anon" in sql
+    assert "alter publication supabase_realtime add table public.signal_records" in sql
+    assert "create function public.ping()" in sql
+
+
+def test_keepalive_workflow_pings_supabase_daily():
+    root = MIGRATIONS[0].parent.parent.parent
+    text = (root / ".github" / "workflows" / "supabase-keepalive.yml").read_text(encoding="utf-8")
+    assert "cron:" in text and "/rest/v1/rpc/ping" in text
+    assert "secrets.SUPABASE_ANON_KEY" in text
