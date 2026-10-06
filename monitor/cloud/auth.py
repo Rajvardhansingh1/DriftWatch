@@ -5,12 +5,16 @@ authorization (org/project membership, role) for anything; RLS on the
 Supabase side and per-route authorization checks on top of this handle
 that (section 5.3). A valid token proves identity, never tenant access.
 
-Deliberately does not use supabase-py: a Supabase Auth access token is a
-standard JWT signed with the project's JWT secret (HS256, legacy
-symmetric signing - the same secret configured for this project). Local
-HS256 verification needs no network round-trip per request and no new
-heavyweight dependency beyond PyJWT, which is already a transitive
-dependency of most JWT-consuming stacks."""
+Tokens are verified with ES256/RS256 against the project's JWKS (fetched
+from SUPABASE_URL and cached) or with HS256 using the legacy shared
+secret. The algorithm is chosen from a fixed allow-list (anything else,
+including "none", is rejected) and then pinned: PyJWT is told to accept
+only that algorithm, and the JWKS key's own algorithm must match it. `iss`
+is enforced only when SUPABASE_URL is set; local-only mode (no
+SUPABASE_URL) has neither a JWKS nor an issuer to check.
+
+Deliberately does not use supabase-py: verification is local with PyJWT,
+so there is no network round-trip per request beyond the cached JWKS."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -63,9 +67,12 @@ def verify_access_token(token: str) -> AuthenticatedUser:
         if client is None:
             raise AuthError("cloud auth is not configured (SUPABASE_URL unset)")
         try:
-            key = client.get_signing_key_from_jwt(token).key
+            signing_key = client.get_signing_key_from_jwt(token)
         except Exception as exc:  # JWKS fetch/lookup failure is an auth failure, not a 500
             raise AuthError("invalid access token: signing key not found") from exc
+        if signing_key.algorithm_name != alg:
+            raise AuthError("invalid access token: key/algorithm mismatch")
+        key = signing_key.key
     elif alg == "HS256":
         if not settings.supabase_jwt_secret:
             raise AuthError("cloud auth is not configured (SUPABASE_JWT_SECRET unset)")
@@ -86,8 +93,11 @@ def verify_access_token(token: str) -> AuthenticatedUser:
         )
     except jwt.ExpiredSignatureError as exc:
         raise AuthError("access token expired") from exc
-    except jwt.InvalidTokenError as exc:
+    except (jwt.PyJWTError, TypeError, ValueError) as exc:
         raise AuthError(f"invalid access token: {exc}") from exc
+
+    if not isinstance(claims["sub"], str) or not claims["sub"]:
+        raise AuthError("access token missing subject claim")
 
     return AuthenticatedUser(
         user_id=claims["sub"], email=claims.get("email"), aal=claims.get("aal", "aal1")
