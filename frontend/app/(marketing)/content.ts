@@ -10,7 +10,7 @@ export const SITE = {
 export const HERO = {
   title: "Notice when your LLM app quietly gets worse.",
   body:
-    "DriftWatch scores five signals on your live traffic and flags the moment they move together. It tells you that quality shifted, not always why.",
+    "DriftWatch scores five signals on a live LLM app and flags the moment they move together. It tells you that quality shifted, not always why.",
   primary: { label: "Create an account", href: "/auth/sign-up" },
   secondary: { label: "Open the live demo", href: "/demo" },
 };
@@ -53,7 +53,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "What is DriftWatch?",
     answer:
-      "DriftWatch is a monitoring tool that watches a live LLM app for silent quality drift. It scores five signals on your real traffic, such as embedding drift and canary accuracy, combines them into one score, and flags you when that score crosses your threshold. It tells you that quality moved, not always why.",
+      "DriftWatch is a monitoring tool that watches a live LLM app for silent quality drift. It scores five signals, such as embedding drift and canary accuracy, combines them into one score, and flags when that score crosses a threshold. It tells you that quality moved, not always why. You can try it on the live demo now.",
   },
   {
     question: "How do I start monitoring my app locally?",
@@ -85,9 +85,14 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
       "The demo runs a small question-answering bot that DriftWatch monitors in real time. Buttons let you push it into drift, for example by swapping to a weaker model or slipping in prompt injection, and you can watch the five signals and the combined score react. Every visitor shares the same demo.",
   },
   {
+    question: "Is the live demo private?",
+    answer:
+      "No. The demo is shared by every visitor, and scenarios you trigger are visible to others. The free-text question you type is sent through the demo server to an LLM provider so the bot can answer it. Please do not type anything sensitive, such as personal data, passwords or confidential company details.",
+  },
+  {
     question: "What can I do with an account today?",
     answer:
-      "Today an account lets you sign in, keep a verified email on file, and be first in line as the local agent and web dashboard ship. Your account is where synced scores and project keys will live. You can delete it at any time from the data deletion page.",
+      "Today you can create an account, sign in and sign out. The account is where your projects and synced scores will live once the local agent and web dashboard ship. The live demo does not need an account. To delete an account today, contact the address on the Security page.",
   },
   {
     question: "What does DriftWatch not do?",

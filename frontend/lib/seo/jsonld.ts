@@ -11,7 +11,7 @@ export function buildLd(on: Set<Feature>, siteUrl: string): object[] {
       name: SITE.name,
       description: SITE.description,
       applicationCategory: "DeveloperApplication",
-      operatingSystem: "Windows, macOS, Linux",
+      operatingSystem: on.has("cli") ? "Windows, macOS, Linux" : "Web",
       url: siteUrl,
     },
     { "@context": "https://schema.org", "@type": "Organization", name: SITE.name, url: siteUrl },

@@ -59,6 +59,12 @@ test("Plan 1 content needs no later feature; later scope lives only in ROADMAP",
   assert.equal(ROADMAP.filter((r) => !isLive(r, all)).length, 0, "roadmap empties when everything ships");
 });
 
+test("operatingSystem reflects what is shipped", () => {
+  const os = (raw: string) => (buildLd(enabledFeatures(raw), "https://example.test")[0] as any).operatingSystem;
+  assert.equal(os(""), "Web");
+  assert.equal(os("cli"), "Windows, macOS, Linux");
+});
+
 test("serializeLd cannot break out of the script tag", () => {
   const out = serializeLd({ x: "</script><script>alert(1)</script>&" });
   assert.ok(!out.includes("<") && !out.includes(">") && !out.includes("&"));
