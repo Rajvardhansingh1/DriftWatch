@@ -10,7 +10,6 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@react-three/fiber": "^8.18.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.4",
     "clsx": "^2.1.1",

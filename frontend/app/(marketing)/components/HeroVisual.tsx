@@ -12,7 +12,10 @@ const HeroScene = dynamic(() => import("./HeroScene"), {
 function canUseWebGL(): boolean {
   try {
     const c = document.createElement("canvas");
-    return Boolean(c.getContext("webgl2") || c.getContext("webgl"));
+    const gl = c.getContext("webgl2") || c.getContext("webgl");
+    // Release the probe context so it does not count against the browser's context limit.
+    (gl?.getExtension("WEBGL_lose_context") as { loseContext(): void } | null | undefined)?.loseContext();
+    return Boolean(gl);
   } catch {
     return false;
   }
@@ -23,7 +26,7 @@ function StaticHero() {
   return <img src="/hero-fallback.svg" alt="" className="h-full w-full" />;
 }
 
-// A WebGL/r3f failure must degrade to the still image, never blank the page.
+// A WebGL/three.js failure must degrade to the still image, never blank the page.
 class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
@@ -38,11 +41,23 @@ export function HeroVisual() {
   const [mode, setMode] = useState<"pending" | "3d" | "static">("pending");
 
   useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setMode(!reduce && canUseWebGL() ? "3d" : "static");
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const decide = () => setMode(!mq.matches && canUseWebGL() ? "3d" : "static");
+    decide();
+    mq.addEventListener("change", decide);
+    return () => mq.removeEventListener("change", decide);
   }, []);
 
-  if (mode === "pending") return <Skeleton label="Loading 3D view" className="h-full w-full" />;
+  if (mode === "pending")
+    return (
+      <div className="relative h-full w-full">
+        <Skeleton label="Loading 3D view" className="h-full w-full" />
+        <noscript>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/hero-fallback.svg" alt="" className="absolute inset-0 h-full w-full" />
+        </noscript>
+      </div>
+    );
   if (mode === "static") return <StaticHero />;
   return (
     <SceneBoundary>

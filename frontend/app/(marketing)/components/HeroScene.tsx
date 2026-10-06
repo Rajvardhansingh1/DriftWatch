@@ -1,27 +1,34 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
-import type { Points } from "three";
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
 
 const COUNT = 1400;
 
-type RGB = [number, number, number];
-
-// DESIGN.md tokens, picked once at mount: --mk-muted / --mk-accent per theme.
-const PALETTE: Record<"light" | "dark", { base: RGB; accent: RGB }> = {
-  light: { base: [0x4b / 255, 0x55 / 255, 0x62 / 255], accent: [0x8a / 255, 0x53 / 255, 0x00 / 255] },
-  dark: { base: [0x8a / 255, 0x97 / 255, 0xa6 / 255], accent: [0xf2 / 255, 0xb8 / 255, 0x4b / 255] },
+// DESIGN.md tokens: --mk-muted / --mk-accent per theme.
+const PALETTE = {
+  light: { base: 0x4b5562, accent: 0x8a5300 },
+  dark: { base: 0x8a97a6, accent: 0xf2b84b },
 };
 
 // A cloud of answers. Every seventh point drifts away from the cluster and
 // back, the way a slice of outputs drifts from the baseline.
-function Cloud({ base, accent }: { base: RGB; accent: RGB }) {
-  const ref = useRef<Points>(null);
-  const { positions, origin, colors, drifting } = useMemo(() => {
+export default function HeroScene() {
+  const host = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    el.appendChild(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.position.z = 4.2;
+    const scene = new THREE.Scene();
+
     const positions = new Float32Array(COUNT * 3);
     const colors = new Float32Array(COUNT * 3);
-    const drifting = new Uint8Array(COUNT);
     for (let i = 0; i < COUNT; i++) {
       const r = 1.6 * Math.cbrt(Math.random());
       const t = Math.random() * Math.PI * 2;
@@ -29,47 +36,91 @@ function Cloud({ base, accent }: { base: RGB; accent: RGB }) {
       positions[i * 3] = r * Math.sin(u) * Math.cos(t);
       positions[i * 3 + 1] = r * Math.sin(u) * Math.sin(t);
       positions[i * 3 + 2] = r * Math.cos(u);
-      drifting[i] = i % 7 === 0 ? 1 : 0;
-      colors.set(drifting[i] ? accent : base, i * 3);
     }
-    return { positions, origin: positions.slice(), colors, drifting };
-  }, [base, accent]);
+    const origin = positions.slice();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({ size: 0.03, vertexColors: true, sizeAttenuation: true });
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
 
-  useFrame(({ clock }) => {
-    const points = ref.current;
-    if (!points) return;
-    const t = clock.getElapsedTime();
-    points.rotation.y = t * 0.05;
-    const amount = (Math.sin(t * 0.4) + 1) / 2;
-    const attr = points.geometry.attributes.position;
-    const arr = attr.array as Float32Array;
-    for (let i = 0; i < COUNT; i++) {
-      if (drifting[i]) arr[i * 3] = origin[i * 3] + amount * 0.9;
-    }
-    attr.needsUpdate = true;
-  });
+    // THREE.Color(hex) converts sRGB -> linear working space; the renderer converts back for display.
+    const dark = window.matchMedia("(prefers-color-scheme: dark)");
+    const c = new THREE.Color();
+    const paint = () => {
+      const p = PALETTE[dark.matches ? "dark" : "light"];
+      for (let i = 0; i < COUNT; i++) {
+        c.setHex(i % 7 === 0 ? p.accent : p.base);
+        colors[i * 3] = c.r;
+        colors[i * 3 + 1] = c.g;
+        colors[i * 3 + 2] = c.b;
+      }
+      geometry.attributes.color.needsUpdate = true;
+    };
+    paint();
+    dark.addEventListener("change", paint);
 
-  return (
-    <points ref={ref}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-      </bufferGeometry>
-      <pointsMaterial size={0.03} vertexColors sizeAttenuation />
-    </points>
-  );
-}
+    const resize = () => {
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(w, h, false);
+      renderer.domElement.style.cssText = "width:100%;height:100%;display:block";
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    const ro = new ResizeObserver(resize);
+    ro.observe(el);
+    resize();
 
-export default function HeroScene() {
-  const { base, accent } = useMemo(
-    () => PALETTE[window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"],
-    [],
-  );
-  return (
-    <div aria-hidden="true" className="h-full w-full">
-      <Canvas camera={{ position: [0, 0, 4.2], fov: 45 }} dpr={[1, 2]}>
-        <Cloud base={base} accent={accent} />
-      </Canvas>
-    </div>
-  );
+    // Elapsed time only counts while running, so resuming does not jump.
+    let elapsed = 0;
+    let last = 0;
+    let raf = 0;
+    let onScreen = true;
+    const frame = (now: number) => {
+      elapsed += (now - last) / 1000;
+      last = now;
+      points.rotation.y = elapsed * 0.05;
+      const amount = (Math.sin((elapsed * 2 * Math.PI) / 16) + 1) / 2;
+      for (let i = 0; i < COUNT; i += 7) positions[i * 3] = origin[i * 3] + amount * 0.9;
+      geometry.attributes.position.needsUpdate = true;
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(frame);
+    };
+    const sync = () => {
+      const run = onScreen && !document.hidden;
+      if (run && !raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else if (!run && raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    };
+    const io = new IntersectionObserver((e) => {
+      onScreen = e[e.length - 1].isIntersecting;
+      sync();
+    });
+    io.observe(el);
+    document.addEventListener("visibilitychange", sync);
+    sync();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      io.disconnect();
+      ro.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+      dark.removeEventListener("change", paint);
+      geometry.dispose();
+      material.dispose();
+      renderer.dispose();
+      renderer.forceContextLoss();
+      renderer.domElement.remove();
+    };
+  }, []);
+
+  return <div ref={host} aria-hidden="true" className="h-full w-full" />;
 }
