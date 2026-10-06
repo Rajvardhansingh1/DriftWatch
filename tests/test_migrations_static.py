@@ -32,3 +32,31 @@ def test_no_credential_material_in_migrations(path):
     assert "service_role" not in sql
     assert not re.search(r"eyj[a-z0-9_\-]{10,}", sql), "JWT-shaped literal in migration"
     assert not re.search(r"gsk_[a-z0-9]{10,}", sql), "provider-key-shaped literal in migration"
+
+
+def _sql(name: str) -> str:
+    return (MIGRATIONS[0].parent / name).read_text(encoding="utf-8")
+
+
+def test_0005_revokes_anon_on_known_definer_functions():
+    sql = _sql("0005_security_hardening.sql")
+    assert "revoke execute on function public.create_organization(text) from public, anon" in sql
+    assert "public.rls_auto_enable()" in sql
+
+
+def test_0005_policies_use_initplan_auth_uid():
+    sql = _sql("0005_security_hardening.sql")
+    policy_bodies = re.findall(r"create policy .*?;", sql, flags=re.S)
+    assert policy_bodies
+    for body in policy_bodies:
+        bare = body.replace("(select auth.uid())", "")
+        assert "auth.uid()" not in bare, body
+
+
+def test_0005_locks_down_signal_records():
+    sql = _sql("0005_security_hardening.sql")
+    assert "revoke all on public.signal_records from anon" in sql
+    assert "revoke insert on public.signal_records from authenticated" in sql
+    assert "grant insert (project_id, event_id, signal, value, meta, occurred_at)" in sql
+    assert "create trigger signal_records_guard" in sql
+    assert "audit_events_select_org_admin" in sql
