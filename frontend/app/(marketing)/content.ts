@@ -10,7 +10,7 @@ export const SITE = {
 export const HERO = {
   title: "Notice when your LLM app gets quietly worse.",
   body:
-    "DriftWatch scores five quality signals on a running LLM app and raises an alert when they move together. It tells you that quality moved, not always why. The live demo needs no account.",
+    "DriftWatch scores five quality signals on a running LLM app and raises an alert when they move together. It tells you that quality moved, not always why.",
   primary: { label: "Create an account", href: "/auth/sign-up" },
   secondary: { label: "Open the live demo", href: "/demo" },
 };
@@ -34,7 +34,7 @@ export const SIGNALS = [
   },
   {
     name: "Hallucination score",
-    text: "Checks each claim against grounding context when you have it, and compares repeated samples when you don't. A word-overlap heuristic, not fact checking.",
+    text: "Compares repeated answers to the same question and measures how much their wording disagrees. A word-overlap heuristic, not fact checking.",
   },
 ];
 
@@ -78,7 +78,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "Can DriftWatch detect LLM hallucinations?",
     answer:
-      "Partly. The hallucination score checks each claim against grounding context when the app has it, and otherwise compares repeated answers to the same question for contradictions. It is a word-overlap heuristic, not fact checking. A model that gives the same wrong answer every time can pass it, so treat a clean score as weak evidence.",
+      "Partly. The hallucination score asks the same question several times and measures how much the answers' wording disagrees. It is a self-consistency heuristic based on word overlap, not fact checking. A model that gives the same wrong answer every time can pass it, so treat a clean score as weak evidence.",
   },
   {
     question: "How do I monitor my own LLM app with DriftWatch?",
