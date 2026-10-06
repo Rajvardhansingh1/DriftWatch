@@ -5,3 +5,13 @@ a key is present in .env."""
 import os
 
 os.environ["DRIFTWATCH_FORCE_SIMULATED"] = "true"
+
+import pytest  # noqa: E402
+
+from monitor.config import settings  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_supabase_url(monkeypatch):
+    """Keep auth tests independent of a developer .env (issuer/JWKS paths)."""
+    monkeypatch.setattr(settings, "supabase_url", "")
