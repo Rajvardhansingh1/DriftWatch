@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
   const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+  if (!data.user) redirect("/auth/sign-in"); // defense in depth; middleware already guards
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="text-lg font-semibold">Your projects</h1>

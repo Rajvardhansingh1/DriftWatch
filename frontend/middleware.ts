@@ -53,6 +53,8 @@ export async function middleware(request: NextRequest) {
       getAll: () => request.cookies.getAll(),
       setAll: (list) => {
         list.forEach(({ name, value }) => request.cookies.set(name, value));
+        // requestHeaders is a stale copy; forward the refreshed cookies to the page render.
+        requestHeaders.set("cookie", request.cookies.getAll().map((c) => `${c.name}=${c.value}`).join("; "));
         response = NextResponse.next({ request: { headers: requestHeaders } });
         response.headers.set("Content-Security-Policy", csp);
         list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));

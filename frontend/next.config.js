@@ -31,7 +31,7 @@ const nextConfig = {
     return [
       { source: "/:path*", headers: baseHeaders },
       {
-        source: "/((?!dashboard|admin|auth).*)",
+        source: "/((?!(?:dashboard|admin|auth)(?:/|$)).*)",
         headers: [{ key: "Content-Security-Policy", value: publicCsp }],
       },
     ];

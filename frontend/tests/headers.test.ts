@@ -18,7 +18,7 @@ test("every route gets baseline security headers", async () => {
 test("public CSP excludes app routes and forbids framing and plugins", async () => {
   const rules: Rule[] = await nextConfig.headers();
   const pub = rules.find((r) => r.headers.some((h) => h.key === "Content-Security-Policy"))!;
-  assert.equal(pub.source, "/((?!dashboard|admin|auth).*)");
+  assert.equal(pub.source, "/((?!(?:dashboard|admin|auth)(?:/|$)).*)");
   const csp = pub.headers.find((h) => h.key === "Content-Security-Policy")!.value;
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /object-src 'none'/);
