@@ -126,3 +126,26 @@ def test_0008_delete_account_order_and_export_hides_key_hash():
     export = sql.split("create function public.export_my_data")[1]
     assert "key_hash" not in export
     assert "limit 20000" in export
+
+
+def test_0008_create_project_serialises_per_user():
+    sql = _sql("0008_console_functions.sql")
+    body = sql.split("create function public.create_project")[1].split("create function public.delete_my_account")[0]
+    assert "pg_advisory_xact_lock(hashtextextended(v_uid::text, 0))" in body
+    assert body.index("pg_advisory_xact_lock") < body.index("from public.organization_members")
+
+
+def test_0008_export_signal_records_is_index_friendly():
+    sql = _sql("0008_console_functions.sql")
+    export = sql.split("create function public.export_my_data")[1]
+    assert "project_id in (select id from public.projects)" in export
+    assert "order by occurred_at desc limit 20000" in export
+
+
+def test_0008_security_modes():
+    sql = _sql("0008_console_functions.sql")
+    export = sql.split("create function public.export_my_data")[1]
+    assert "security invoker" in export and "security definer" not in export
+    for name in ("create_project", "delete_my_account"):
+        body = sql.split(f"create function public.{name}")[1].split("$$;")[0]
+        assert "security definer" in body

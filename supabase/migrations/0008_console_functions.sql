@@ -19,6 +19,9 @@ begin
     raise exception 'project name must be 1 to 64 characters' using errcode = 'PT422';
   end if;
 
+  -- Serialise per user: keeps the project limit and the single personal org race-free.
+  perform pg_advisory_xact_lock(hashtextextended(v_uid::text, 0));
+
   select organization_id into v_org
   from public.organization_members
   where user_id = v_uid and role = 'owner' and status = 'active'
@@ -102,7 +105,9 @@ as $$
       from public.project_api_keys k), '[]'::jsonb),
     'signal_records_latest_20000', coalesce((
       select jsonb_agg(to_jsonb(r))
-      from (select * from public.signal_records order by occurred_at desc limit 20000) r), '[]'::jsonb),
+      from (select * from public.signal_records
+            where project_id in (select id from public.projects)
+            order by occurred_at desc limit 20000) r), '[]'::jsonb),
     'signal_hourly', coalesce((select jsonb_agg(to_jsonb(h)) from public.signal_hourly h), '[]'::jsonb),
     'audit_events', coalesce((select jsonb_agg(to_jsonb(a)) from public.audit_events a), '[]'::jsonb)
   );
