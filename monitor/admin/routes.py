@@ -25,5 +25,9 @@ def admin_status(authorization: str | None = Header(default=None)):
         record_admin_action(user.user_id, "admin_status", "denied")
         raise HTTPException(status_code=403, detail="platform admin required")
 
+    if user.aal != "aal2":
+        record_admin_action(user.user_id, "admin_status", "denied_no_mfa")
+        raise HTTPException(status_code=403, detail="multi-factor authentication required")
+
     record_admin_action(user.user_id, "admin_status", "ok")
     return {"status": "ok", "scope": "platform_admin"}

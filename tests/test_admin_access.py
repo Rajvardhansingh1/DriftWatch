@@ -17,16 +17,24 @@ USER_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 def client(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", SECRET)
     monkeypatch.setattr(settings, "platform_admin_user_ids", ADMIN_ID)
+    monkeypatch.setattr(settings, "supabase_url", "")
     app = FastAPI()
     app.include_router(router)
     return TestClient(app)
 
 
-def token_for(sub, email=None):
-    claims = {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 600}
+def token_for(sub, email=None, aal="aal2"):
+    claims = {"sub": sub, "aud": "authenticated", "exp": int(time.time()) + 600, "aal": aal}
     if email:
         claims["email"] = email
     return jwt.encode(claims, SECRET, algorithm="HS256")
+
+
+def test_admin_without_mfa_is_403(client):
+    resp = client.get(
+        "/api/admin/status", headers={"Authorization": f"Bearer {token_for(ADMIN_ID, aal='aal1')}"}
+    )
+    assert resp.status_code == 403
 
 
 def test_no_token_is_401(client):

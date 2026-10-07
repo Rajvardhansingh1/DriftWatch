@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -16,7 +17,7 @@ def valid_event(**overrides):
     event = {
         "schema_version": 1,
         "event_id": str(uuid.uuid4()),
-        "occurred_at": "2026-09-30T10:00:00+00:00",
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
         "source": "driftwatch-demo-bot",
         "signal": "embedding_drift",
         "value": 0.25,
@@ -80,3 +81,62 @@ def test_non_object_payload_is_rejected():
 
 def test_content_capture_defaults_to_false():
     assert validate_event(valid_event()).content_capture is False
+
+
+def _at(delta):
+    return valid_event(occurred_at=(datetime.now(timezone.utc) + delta).isoformat())
+
+
+def test_future_timestamp_rejected():
+    with pytest.raises(IngestionError, match="occurred_at"):
+        validate_event(_at(timedelta(minutes=6)))
+
+
+def test_ancient_timestamp_rejected():
+    with pytest.raises(IngestionError, match="occurred_at"):
+        validate_event(_at(timedelta(days=-31)))
+
+
+def test_timestamp_inside_window_accepted():
+    validate_event(_at(timedelta(days=-29)))
+
+
+def test_meta_too_many_keys_rejected():
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta={f"k{i}": 1 for i in range(33)}))
+
+
+def test_meta_too_deep_rejected():
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta={"a": {"b": {"c": {"d": 1}}}}))
+
+
+def test_absurd_value_rejected():
+    with pytest.raises(IngestionError, match="value"):
+        validate_event(valid_event(value=1e12))
+
+
+def test_meta_nested_550_levels_is_rejected_not_recursion_error():
+    meta = {"a": 1}
+    for _ in range(550):
+        meta = {"a": meta}
+    import json
+    assert len(json.dumps(meta)) < 4096
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta=meta))
+
+
+def test_meta_exactly_32_keys_accepted():
+    validate_event(valid_event(meta={f"k{i}": 1 for i in range(32)}))
+
+
+def test_meta_depth_exactly_allowed_accepted():
+    validate_event(valid_event(meta={"a": {"b": 1}}))
+
+
+def test_meta_nested_beyond_recursion_limit_is_rejected():
+    meta = {"a": 1}
+    for _ in range(5000):
+        meta = {"a": meta}
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta=meta))

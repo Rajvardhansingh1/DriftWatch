@@ -56,3 +56,9 @@ logs/
 
 # Internal planning / spec docs — not for production repo
 Docs/
+
+# SDD scratch workspace
+.superpowers/
+
+# Dev-only MCP config (points tooling at a Supabase project)
+.mcp.json

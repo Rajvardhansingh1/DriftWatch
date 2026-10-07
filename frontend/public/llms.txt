@@ -1,0 +1,12 @@
+# DriftWatch
+
+> DriftWatch watches a live LLM app for silent quality drift. It scores five signals (embedding drift, self-consistency, canary accuracy, judge trend, hallucination score), combines them into one score, and flags when that score crosses a threshold. It detects that quality moved, not always why.
+
+## Pages
+- [Home](/): what DriftWatch measures and how it works
+- [Live demo](/demo): a shared demo dashboard you can push into drift with built-in scenarios
+- [Privacy](/privacy): what data is stored and where
+
+## Limits
+- The hallucination score is a self-consistency heuristic, not fact checking.
+- A quiet score means nothing obvious moved, not that nothing is wrong.

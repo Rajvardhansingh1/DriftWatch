@@ -147,6 +147,9 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen">
       <ColdStartOverlay visible={!awake} />
+      <p className="border-b border-line bg-black/20 px-6 py-1.5 text-center text-xs text-dim">
+        Demo: this dashboard is shared by every visitor, so scenarios you trigger are visible to others.
+      </p>
       <header className="flex items-center justify-between border-b border-line px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="flex h-7 w-7 items-center justify-center rounded border border-line font-mono text-xs text-dim">

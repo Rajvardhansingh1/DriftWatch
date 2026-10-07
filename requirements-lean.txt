@@ -13,5 +13,5 @@ slowapi
 groq
 google-generativeai
 python-dotenv
-pyjwt
+pyjwt[crypto]
 httpx

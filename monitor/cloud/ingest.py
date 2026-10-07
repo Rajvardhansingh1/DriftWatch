@@ -13,7 +13,7 @@ import json
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 ALLOWED_SIGNALS = frozenset(
@@ -33,6 +33,21 @@ OPTIONAL_STRING_FIELDS = frozenset(
 ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_STRING_FIELDS | frozenset({"meta", "content_capture"})
 MAX_META_BYTES = 4096
 MAX_SOURCE_LEN = 128
+MAX_META_KEYS = 32
+MAX_META_DEPTH = 3  # {"a": {"b": 1}} is depth 3; client-side courtesy check (R21)
+MAX_ABS_VALUE = 1e9
+MAX_AGE = timedelta(days=30)
+MAX_FUTURE = timedelta(minutes=5)
+
+
+def _depth(obj, level: int = 1) -> int:
+    if level > MAX_META_DEPTH:
+        return level  # stop early: no unbounded recursion on hostile input
+    if isinstance(obj, dict) and obj:
+        return max(_depth(v, level + 1) for v in obj.values())
+    if isinstance(obj, list) and obj:
+        return max(_depth(v, level + 1) for v in obj)
+    return level
 
 
 class IngestionError(ValueError):
@@ -77,6 +92,9 @@ def validate_event(payload: dict) -> ValidatedEvent:
         raise IngestionError("occurred_at must be an ISO-8601 timestamp") from exc
     if occurred_at.tzinfo is None:
         raise IngestionError("occurred_at must include a timezone offset")
+    now = datetime.now(timezone.utc)
+    if occurred_at > now + MAX_FUTURE or occurred_at < now - MAX_AGE:
+        raise IngestionError("occurred_at is outside the accepted window")
 
     signal = payload["signal"]
     if signal not in ALLOWED_SIGNALS:
@@ -85,6 +103,8 @@ def validate_event(payload: dict) -> ValidatedEvent:
     value = payload["value"]
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise IngestionError("value must be a finite number")
+    if abs(value) >= MAX_ABS_VALUE:
+        raise IngestionError("value is out of range")
 
     source = payload["source"]
     if not isinstance(source, str) or not source or len(source) > MAX_SOURCE_LEN:
@@ -93,6 +113,10 @@ def validate_event(payload: dict) -> ValidatedEvent:
     meta = payload.get("meta", {})
     if not isinstance(meta, dict):
         raise IngestionError("meta must be an object")
+    # Shape check first: _depth stops at MAX_META_DEPTH, so json.dumps below
+    # never sees pathologically nested input (it would raise RecursionError).
+    if len(meta) > MAX_META_KEYS or _depth(meta) > MAX_META_DEPTH:
+        raise IngestionError("meta has too many keys or is nested too deeply")
     if len(json.dumps(meta)) > MAX_META_BYTES:
         raise IngestionError("meta exceeds size limit")
 

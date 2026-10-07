@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 import jwt
@@ -34,7 +35,7 @@ def event():
     return {
         "schema_version": 1,
         "event_id": str(uuid.uuid4()),
-        "occurred_at": "2026-10-04T10:00:00+00:00",
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
         "source": "driftwatch-demo-bot",
         "signal": "embedding_drift",
         "value": 0.2,
