@@ -90,3 +90,14 @@ test("actions.ts is a server-actions module and never logs", async () => {
   assert.doesNotMatch(src, /console\./);
   assert.doesNotMatch(readFileSync("lib/console/actions-core.ts", "utf8"), /console\./);
 });
+
+test("every server action checks the session before calling its core", async () => {
+  const { readFileSync } = await import("node:fs");
+  const chunks = readFileSync("app/dashboard/actions.ts", "utf8").split("export async function").slice(1);
+  assert.equal(chunks.length, 4);
+  for (const c of chunks) {
+    assert.ok(c.includes("await authed()"), c.slice(0, 40));
+    assert.ok(c.includes("if (!a) return SIGN_IN"), c.slice(0, 40));
+    assert.ok(c.indexOf("await authed()") < c.indexOf("Core("), c.slice(0, 40));
+  }
+});

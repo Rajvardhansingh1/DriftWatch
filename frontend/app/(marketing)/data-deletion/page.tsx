@@ -27,7 +27,7 @@ export default function DataDeletion() {
           account, projects, API keys and scores are deleted straight away.
         </p>
         <p className={p}>
-          You can also download all your data first from the same page. If you cannot sign in, send a request to{" "}
+          You can also download your data first from the same page. If you cannot sign in, send a request to{" "}
           <a className="underline" href="mailto:singh.rajvardhan.it@gmail.com">singh.rajvardhan.it@gmail.com</a>{" "}
           from the address you signed up with. The{" "}
           <a className="underline" href="/.well-known/security.txt">Security page</a> (/.well-known/security.txt)

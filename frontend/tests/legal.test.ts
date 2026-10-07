@@ -41,3 +41,10 @@ test("privacy does not call live features not live", () => {
   assert.ok(!src.includes("These features are not live yet"));
   assert.ok(src.includes("local agent is not available yet"));
 });
+
+test("privacy discloses the key prefix and what remains in the security log", () => {
+  const src = read("privacy");
+  assert.ok(src.includes("a short display prefix of the key"));
+  assert.ok(src.includes("Earlier log entries keep a random identifier that no longer links to you after you delete your account."));
+  assert.ok(!read("data-deletion").includes("download all your data"));
+});

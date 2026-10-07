@@ -9,8 +9,11 @@ import { DEMO_PROJECT_ID, TOKEN, USER, startFake, state } from "./fake-supabase.
 
 const FRONTEND = resolve(fileURLToPath(import.meta.url), "../..");
 const SHOTS = resolve(FRONTEND, "../.superpowers/sdd/2026-10-07-plan-2-cloud-console/shots");
-const PLAYWRIGHT_CORE_DIR = process.env.PLAYWRIGHT_CORE_DIR
-  ?? "C:/Users/RAJVAE~1/AppData/Local/Temp/claude/d--Work-ext-AIProjects/0d3dd6b8-8c9d-462c-b0d1-2ad9e773e31a/scratchpad/live";
+const PLAYWRIGHT_CORE_DIR = process.env.PLAYWRIGHT_CORE_DIR;
+if (!PLAYWRIGHT_CORE_DIR) {
+  console.error("PLAYWRIGHT_CORE_DIR is not set. Install playwright-core in a folder outside the repo and point the variable at it (see e2e/README.md).");
+  process.exit(2);
+}
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const HOST = "127.0.0.1";
 const WEB = `http://${HOST}:3100`;
@@ -184,7 +187,11 @@ try {
     assert(/^dw_[0-9a-f]{10}_[0-9a-f]{64}$/.test(apiKey), `bad key "${apiKey.slice(0, 16)}..."`);
     assert(await page.getByText("Send a first event").isVisible(), "example missing while key shown");
     await page.getByText("Send a first event").click();
-    assert((await page.locator("pre").innerText()).includes(apiKey), "example lacks the key");
+    const example = await page.locator("pre").innerText();
+    assert(example.includes(apiKey), "example lacks the key");
+    assert(!example.includes("<"), "example still has placeholders");
+    assert(await page.getByRole("button", { name: "Create key" }).isDisabled(), "Create enabled while key displayed");
+    await page.screenshot({ path: join(SHOTS, "keys-created.png"), fullPage: true });
     await page.getByText("laptop").first().waitFor();
     await snapshotLeak("key displayed");
     await page.getByRole("button", { name: "I have saved it" }).click();
@@ -208,10 +215,10 @@ try {
 
   await check("f. revoke needs two clicks then shows revoked", async () => {
     const row = page.locator("li", { hasText: "laptop" });
-    await row.getByRole("button", { name: "Revoke" }).click();
-    await row.getByRole("button", { name: "Click again to revoke" }).waitFor({ timeout: 3000 });
+    await row.getByRole("button", { name: "Revoke laptop" }).click();
+    await row.getByRole("button", { name: "Click again to revoke laptop" }).waitFor({ timeout: 3000 });
     assert(state.project_api_keys.every((k) => !k.revoked_at), "revoked after one click");
-    await row.getByRole("button", { name: "Click again to revoke" }).click();
+    await row.getByRole("button", { name: "Click again to revoke laptop" }).click();
     await row.getByText("revoked", { exact: true }).waitFor({ timeout: 10_000 });
     assert(state.project_api_keys[0].revoked_at, "fake not revoked");
     assert((await row.getByRole("button").count()) === 0, "revoke button still shown");
@@ -255,7 +262,7 @@ try {
     assert(!text.includes(apiKey.slice(14)), "export contains the key secret");
     const data = JSON.parse(text);
     assert(data.api_keys.length === 1 && data.projects.length === 2, `api_keys ${data.api_keys.length}, projects ${data.projects.length}`);
-    return `${text.length} bytes, ${data.api_keys.length} key meta, ${data.signal_records_latest_20000.length} rows`;
+    return `${text.length} bytes, ${data.api_keys.length} key meta, ${data.signal_records_latest_10000.length} rows`;
   });
 
   await check("g2. delete needs the typed email, then leaves to /", async () => {

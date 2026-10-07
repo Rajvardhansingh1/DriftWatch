@@ -135,7 +135,7 @@ function rpc(name, args) {
         memberships: [{ organization_id: ORG_ID, user_id: USER.id, role: "owner", status: "active" }],
         projects: state.projects,
         api_keys: state.project_api_keys.map(({ key_hash, ...meta }) => meta),
-        signal_records_latest_20000: [...state.signal_records].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1)).slice(0, 20000),
+        signal_records_latest_10000: [...state.signal_records].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1)).slice(0, 10000),
         signal_hourly: state.signal_hourly,
         audit_events: [],
       }];

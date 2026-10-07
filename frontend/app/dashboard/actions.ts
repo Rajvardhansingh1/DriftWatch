@@ -45,7 +45,7 @@ export async function deleteAccount(typedEmail: string): Promise<ActionResult> {
     try {
       await a.supabase.auth.signOut({ scope: "global" });
     } catch {
-      // The user row is already gone; the cookies are cleared by the redirect.
+      // signOut removes the session even if the user row is already gone; the client then navigates away.
     }
   }
   return r;

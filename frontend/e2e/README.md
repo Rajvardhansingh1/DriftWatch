@@ -21,16 +21,15 @@ enforces this) and nothing here is deployed.
 ## Run
 
 ```bash
-# once, outside the repo: playwright-core is not a project dependency
-mkdir C:/tmp/pw && cd C:/tmp/pw && npm init -y && npm i playwright-core
+# once, in a folder outside the repo: playwright-core is not a project dependency
+mkdir /path/to/playwright-core-install && cd /path/to/playwright-core-install && npm init -y && npm i playwright-core
 
 cd frontend
-PLAYWRIGHT_CORE_DIR=C:/tmp/pw node e2e/run.mjs
+PLAYWRIGHT_CORE_DIR=/path/to/playwright-core-install node e2e/run.mjs
 ```
 
-- `PLAYWRIGHT_CORE_DIR`: folder whose `node_modules` contains `playwright-core`. Defaults to
-  the scratchpad folder used when the harness was written
-  (`C:/Users/RAJVAE~1/AppData/Local/Temp/claude/.../scratchpad/live`).
+- `PLAYWRIGHT_CORE_DIR`: required; folder whose `node_modules` contains `playwright-core`
+  (the runner exits with a hint when it is missing).
 - `CHROME_PATH`: Chrome binary, default `C:/Program Files/Google/Chrome/Application/chrome.exe`.
 - `E2E_SKIP_BUILD=1`: reuse the existing `.next` (must already be built by `run.mjs`).
 - `E2E_VERBOSE=1`: log every request the fake receives and the Next server output.

@@ -56,7 +56,7 @@ test("event example uses the sample values when given and keeps placeholders oth
 test("KeyManager UX guards: one key at a time, revoke label, copy failure, cleared error", () => {
   const src = readFileSync("components/console/KeyManager.tsx", "utf8");
   assert.match(src, /disabled=\{busy \|\| created !== null\}/);
-  assert.match(src, /aria-label=\{`Revoke \$\{k\.name\}`\}/);
+  assert.match(src, /aria-label=\{confirming === k\.id \? `Click again to revoke \$\{k\.name\}` : `Revoke \$\{k\.name\}`\}/);
   assert.match(src, /Copy failed\. Select the key above/);
   assert.match(src, /aria-live="polite"/);
   assert.match(src, /setConfirming\(null\);\s*setError\(""\)/);

@@ -146,7 +146,7 @@ export function KeyManager({
                 </p>
               </div>
               {!k.revoked_at && (
-                <button onClick={() => onRevoke(k.id)} aria-label={`Revoke ${k.name}`} className="rounded border border-line px-3 py-1.5 text-xs hover:border-alert hover:text-alert">
+                <button onClick={() => onRevoke(k.id)} aria-label={confirming === k.id ? `Click again to revoke ${k.name}` : `Revoke ${k.name}`} className="rounded border border-line px-3 py-1.5 text-xs hover:border-alert hover:text-alert">
                   {confirming === k.id ? "Click again to revoke" : "Revoke"}
                 </button>
               )}
