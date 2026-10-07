@@ -27,6 +27,30 @@ do $$ begin
   exception when sqlstate 'PT422' then null; end;
 end $$;
 
+-- Leaving the personal org must not reset the limit (simulated as postgres: membership row removed).
+reset role;
+delete from public.organization_members
+  where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and organization_id = current_setting('test.org')::uuid;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated"}', true);
+do $$ begin
+  begin perform public.create_project('bypass');
+        raise exception 'FAIL: limit bypass via leaving org';
+  exception when sqlstate 'PT422' then null; end;
+end $$;
+reset role;
+insert into public.organization_members (organization_id, user_id, role)
+  values (current_setting('test.org')::uuid, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'owner');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated"}', true);
+
+-- Projects cannot be moved between orgs (no column privilege on organization_id).
+do $$ begin
+  begin update public.projects set organization_id = organization_id where id = current_setting('test.p1')::uuid;
+        raise exception 'FAIL: organization_id update allowed';
+  exception when insufficient_privilege then null; end;
+end $$;
+
 -- Direct inserts are closed: projects only come from create_project.
 do $$ begin
   begin insert into public.projects (organization_id, name)

@@ -22,6 +22,13 @@ begin
   -- Serialise per user: keeps the project limit and the single personal org race-free.
   perform pg_advisory_xact_lock(hashtextextended(v_uid::text, 0));
 
+  -- Count across every org the user created, so leaving/recreating an org cannot reset the limit.
+  if (select count(*) from public.projects p
+      join public.organizations o on o.id = p.organization_id
+      where o.created_by = v_uid) >= 5 then
+    raise exception 'project limit reached' using errcode = 'PT422';
+  end if;
+
   select organization_id into v_org
   from public.organization_members
   where user_id = v_uid and role = 'owner' and status = 'active'
@@ -33,10 +40,6 @@ begin
       returning id into v_org;
     insert into public.organization_members (organization_id, user_id, role)
       values (v_org, v_uid, 'owner');
-  end if;
-
-  if (select count(*) from public.projects where organization_id = v_org) >= 5 then
-    raise exception 'project limit reached' using errcode = 'PT422';
   end if;
 
   insert into public.projects (organization_id, name) values (v_org, v_name)
@@ -103,11 +106,11 @@ as $$
         'id', k.id, 'project_id', k.project_id, 'name', k.name, 'prefix', k.prefix,
         'created_at', k.created_at, 'last_used_at', k.last_used_at, 'revoked_at', k.revoked_at))
       from public.project_api_keys k), '[]'::jsonb),
-    'signal_records_latest_20000', coalesce((
+    'signal_records_latest_10000', coalesce((
       select jsonb_agg(to_jsonb(r))
       from (select * from public.signal_records
             where project_id in (select id from public.projects)
-            order by occurred_at desc limit 20000) r), '[]'::jsonb),
+            order by occurred_at desc limit 10000) r), '[]'::jsonb),
     'signal_hourly', coalesce((select jsonb_agg(to_jsonb(h)) from public.signal_hourly h), '[]'::jsonb),
     'audit_events', coalesce((select jsonb_agg(to_jsonb(a)) from public.audit_events a), '[]'::jsonb)
   );
@@ -118,3 +121,6 @@ grant execute on function public.export_my_data() to authenticated;
 -- Projects are created only through create_project (limit + audit). Close the direct-insert path.
 drop policy "projects_insert_admin" on public.projects;
 revoke insert on public.projects from authenticated;
+-- Clients may rename a project or change its settings, never move it between orgs.
+revoke update on public.projects from authenticated;
+grant update (name, settings) on public.projects to authenticated;

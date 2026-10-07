@@ -125,7 +125,8 @@ def test_0008_delete_account_order_and_export_hides_key_hash():
     assert "delete from public.project_api_keys where created_by" in body
     export = sql.split("create function public.export_my_data")[1]
     assert "key_hash" not in export
-    assert "limit 20000" in export
+    assert "limit 10000" in export
+    assert "signal_records_latest_10000" in export and "20000" not in export
 
 
 def test_0008_create_project_serialises_per_user():
@@ -139,7 +140,7 @@ def test_0008_export_signal_records_is_index_friendly():
     sql = _sql("0008_console_functions.sql")
     export = sql.split("create function public.export_my_data")[1]
     assert "project_id in (select id from public.projects)" in export
-    assert "order by occurred_at desc limit 20000" in export
+    assert "order by occurred_at desc limit 10000" in export
 
 
 def test_0008_security_modes():
@@ -159,3 +160,15 @@ def test_0008_closes_direct_project_insert_and_rollback_restores():
     assert "grant insert on public.projects to authenticated;" in down
     assert 'create policy "projects_insert_admin" on public.projects for insert' in down
     assert down.index("create policy") < down.index("drop function")
+
+
+def test_0008_limit_counts_all_created_orgs_and_project_updates_restricted():
+    sql = _sql("0008_console_functions.sql")
+    body = sql.split("create function public.create_project")[1].split("create function public.delete_my_account")[0]
+    assert "o.created_by = v_uid" in body
+    assert body.index("o.created_by = v_uid") < body.index("insert into public.organizations")
+    assert "revoke update on public.projects from authenticated;" in sql
+    assert "grant update (name, settings) on public.projects to authenticated;" in sql
+    down = (MIGRATIONS[0].parent.parent / "rollback" / "0008_down.sql").read_text(encoding="utf-8")
+    assert down.index("revoke update (name, settings) on public.projects from authenticated;") < down.index(
+        "grant update on public.projects to authenticated;")
