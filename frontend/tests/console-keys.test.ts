@@ -43,3 +43,21 @@ test("event example uses the RPC endpoint and the key placeholder, not a real ke
   assert.match(text, /apikey: sb_publishable_x/);
   assert.doesNotMatch(text, /dw_[0-9a-f]{10}_/);
 });
+
+test("event example uses the sample values when given and keeps placeholders otherwise", () => {
+  const sample = { eventId: "11111111-1111-4111-8111-111111111111", occurredAt: "2026-10-08T10:00:00.000Z" };
+  const withSample = eventExample("https://abc.supabase.co", "sb_publishable_x", "dw_key", sample);
+  assert.doesNotMatch(withSample, /</);
+  assert.match(withSample, new RegExp(sample.eventId));
+  assert.match(withSample, new RegExp(sample.occurredAt));
+  assert.match(eventExample("https://abc.supabase.co", "k", "K"), /<a new uuid>/);
+});
+
+test("KeyManager UX guards: one key at a time, revoke label, copy failure, cleared error", () => {
+  const src = readFileSync("components/console/KeyManager.tsx", "utf8");
+  assert.match(src, /disabled=\{busy \|\| created !== null\}/);
+  assert.match(src, /aria-label=\{`Revoke \$\{k\.name\}`\}/);
+  assert.match(src, /Copy failed\. Select the key above/);
+  assert.match(src, /aria-live="polite"/);
+  assert.match(src, /setConfirming\(null\);\s*setError\(""\)/);
+});

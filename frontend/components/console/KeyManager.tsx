@@ -5,7 +5,9 @@ import { useState } from "react";
 import { createApiKey, revokeApiKey } from "@/app/dashboard/actions";
 import type { KeyRow } from "@/lib/console/data";
 
-export function eventExample(apiBase: string, anonKey: string, apiKey: string): string {
+export function eventExample(apiBase: string, anonKey: string, apiKey: string,
+  sample?: { eventId: string; occurredAt: string },
+): string {
   return [
     `curl -X POST ${apiBase}/rest/v1/rpc/ingest_event \\`,
     `  -H "apikey: ${anonKey}" \\`,
@@ -14,8 +16,8 @@ export function eventExample(apiBase: string, anonKey: string, apiKey: string): 
     `    "p_api_key": "${apiKey}",`,
     `    "p_event": {`,
     `      "schema_version": 1,`,
-    `      "event_id": "<a new uuid>",`,
-    `      "occurred_at": "<now, ISO 8601 with Z>",`,
+    `      "event_id": "${sample?.eventId ?? "<a new uuid>"}",`,
+    `      "occurred_at": "${sample?.occurredAt ?? "<now, ISO 8601 with Z>"}",`,
     `      "source": "my-app",`,
     `      "signal": "combined_score",`,
     `      "value": 0.12`,
@@ -31,8 +33,9 @@ export function KeyManager({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [created, setCreated] = useState<{ name: string; key: string } | null>(null);
+  const [created, setCreated] = useState<{ name: string; key: string; eventId: string; occurredAt: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
 
   async function onCreate(e: React.FormEvent) {
@@ -45,9 +48,10 @@ export function KeyManager({
         setError(result.error);
         return;
       }
-      setCreated({ name, key: result.key }); // lives in memory only; refresh keeps this component mounted
+      setCreated({ name, key: result.key, eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() }); // lives in memory only; refresh keeps this component mounted
       setName("");
       setCopied(false);
+      setCopyFailed(false);
       router.refresh();
     } catch {
       setError("Could not create the key. Check your connection and try again.");
@@ -62,6 +66,7 @@ export function KeyManager({
       return;
     }
     setConfirming(null);
+    setError("");
     try {
       const result = await revokeApiKey(id);
       if (!result.ok) setError(result.error);
@@ -75,8 +80,10 @@ export function KeyManager({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      setCopyFailed(false);
     } catch {
       setCopied(false);
+      setCopyFailed(true);
     }
   }
 
@@ -89,15 +96,18 @@ export function KeyManager({
           <code className="mt-3 block break-all rounded bg-bg px-3 py-2 font-mono text-xs">{created.key}</code>
           <div className="mt-3 flex gap-3">
             <button onClick={() => copy(created.key)} className="rounded border border-line px-3 py-1.5 text-sm hover:border-dim">
-              {copied ? "Copied" : "Copy key"}
+              {copied ? <span aria-live="polite">Copied</span> : "Copy key"}
             </button>
-            <button onClick={() => setCreated(null)} className="rounded bg-stable px-3 py-1.5 text-sm font-medium text-bg">
+            <button onClick={() => { setCreated(null); setCopyFailed(false); }} className="rounded bg-stable px-3 py-1.5 text-sm font-medium text-bg">
               I have saved it
             </button>
           </div>
+          <p aria-live="polite" className="mt-2 text-xs text-alert">
+            {copyFailed ? "Copy failed. Select the key above and copy it manually." : ""}
+          </p>
           <details className="mt-4 text-xs text-dim">
             <summary className="cursor-pointer">Send a first event</summary>
-            <pre className="mt-2 overflow-x-auto rounded bg-bg p-3 font-mono">{eventExample(apiBase, anonKey, created.key)}</pre>
+            <pre className="mt-2 overflow-x-auto rounded bg-bg p-3 font-mono">{eventExample(apiBase, anonKey, created.key, created)}</pre>
           </details>
         </section>
       )}
@@ -114,10 +124,11 @@ export function KeyManager({
             className="w-56 rounded border border-line bg-panel px-3 py-2 text-sm text-text"
           />
         </label>
-        <button disabled={busy} className="rounded bg-stable px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">
+        <button disabled={busy || created !== null} className="rounded bg-stable px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">
           {busy ? "Creating..." : "Create key"}
         </button>
       </form>
+      {created && <p className="mt-2 text-xs text-dim">Save or dismiss the key above before creating another.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-alert">{error}</p>}
 
       <h2 className="mt-10 text-sm font-semibold">Keys</h2>
@@ -135,7 +146,7 @@ export function KeyManager({
                 </p>
               </div>
               {!k.revoked_at && (
-                <button onClick={() => onRevoke(k.id)} className="rounded border border-line px-3 py-1.5 text-xs hover:border-alert hover:text-alert">
+                <button onClick={() => onRevoke(k.id)} aria-label={`Revoke ${k.name}`} className="rounded border border-line px-3 py-1.5 text-xs hover:border-alert hover:text-alert">
                   {confirming === k.id ? "Click again to revoke" : "Revoke"}
                 </button>
               )}
