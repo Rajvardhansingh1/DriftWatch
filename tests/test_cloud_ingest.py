@@ -114,3 +114,29 @@ def test_meta_too_deep_rejected():
 def test_absurd_value_rejected():
     with pytest.raises(IngestionError, match="value"):
         validate_event(valid_event(value=1e12))
+
+
+def test_meta_nested_550_levels_is_rejected_not_recursion_error():
+    meta = {"a": 1}
+    for _ in range(550):
+        meta = {"a": meta}
+    import json
+    assert len(json.dumps(meta)) < 4096
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta=meta))
+
+
+def test_meta_exactly_32_keys_accepted():
+    validate_event(valid_event(meta={f"k{i}": 1 for i in range(32)}))
+
+
+def test_meta_depth_exactly_allowed_accepted():
+    validate_event(valid_event(meta={"a": {"b": 1}}))
+
+
+def test_meta_nested_beyond_recursion_limit_is_rejected():
+    meta = {"a": 1}
+    for _ in range(5000):
+        meta = {"a": meta}
+    with pytest.raises(IngestionError, match="meta"):
+        validate_event(valid_event(meta=meta))

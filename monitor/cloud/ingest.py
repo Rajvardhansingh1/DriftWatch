@@ -41,6 +41,8 @@ MAX_FUTURE = timedelta(minutes=5)
 
 
 def _depth(obj, level: int = 1) -> int:
+    if level > MAX_META_DEPTH:
+        return level  # stop early: no unbounded recursion on hostile input
     if isinstance(obj, dict) and obj:
         return max(_depth(v, level + 1) for v in obj.values())
     if isinstance(obj, list) and obj:
@@ -111,10 +113,12 @@ def validate_event(payload: dict) -> ValidatedEvent:
     meta = payload.get("meta", {})
     if not isinstance(meta, dict):
         raise IngestionError("meta must be an object")
-    if len(json.dumps(meta)) > MAX_META_BYTES:
-        raise IngestionError("meta exceeds size limit")
+    # Shape check first: _depth stops at MAX_META_DEPTH, so json.dumps below
+    # never sees pathologically nested input (it would raise RecursionError).
     if len(meta) > MAX_META_KEYS or _depth(meta) > MAX_META_DEPTH:
         raise IngestionError("meta has too many keys or is nested too deeply")
+    if len(json.dumps(meta)) > MAX_META_BYTES:
+        raise IngestionError("meta exceeds size limit")
 
     content_capture = payload.get("content_capture", False)
     if not isinstance(content_capture, bool):
