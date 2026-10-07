@@ -15,7 +15,7 @@ export default async function SettingsPage() {
       <section aria-labelledby="export" className="mt-8">
         <h2 id="export" className="text-sm font-semibold">Export your data</h2>
         <p className="mt-2 max-w-xl text-sm text-dim">
-          Download your projects, key details (never the keys themselves), the latest 20,000 signal rows,
+          Download your projects, key details (never the keys themselves), the latest 10,000 signal rows,
           hourly summaries and audit events as one JSON file.
         </p>
         <a

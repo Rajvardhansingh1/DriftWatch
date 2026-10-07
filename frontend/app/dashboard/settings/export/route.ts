@@ -13,7 +13,15 @@ export async function GET() {
   if (error) {
     return new Response("Export unavailable", { status: 502, headers: { "Cache-Control": "no-store" } });
   }
-  return new Response(JSON.stringify(data, null, 2), {
+  const body = JSON.stringify(data);
+  // Serverless responses cap near 4.5 MB; refuse cleanly instead of failing mid-download.
+  if (new TextEncoder().encode(body).length > 4_000_000) {
+    return new Response("Export too large. Contact us and we will send it to you.", {
+      status: 413,
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
+    });
+  }
+  return new Response(body, {
     headers: {
       "Content-Type": "application/json",
       "Content-Disposition": 'attachment; filename="driftwatch-export.json"',
