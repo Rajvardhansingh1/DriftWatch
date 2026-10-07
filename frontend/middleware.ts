@@ -7,7 +7,7 @@ function buildCsp(nonce: string): string {
   const dev = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
   const api = process.env.NEXT_PUBLIC_MONITOR_API_URL ?? "";
   const sb = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const wss = sb ? sb.replace(/^https:/, "wss:") : "";
+  const wss = sb ? sb.replace(/^http/, "ws") : ""; // https->wss, http->ws (local Supabase)
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev}`,
