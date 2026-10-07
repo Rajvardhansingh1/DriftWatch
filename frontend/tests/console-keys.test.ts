@@ -61,3 +61,9 @@ test("KeyManager UX guards: one key at a time, revoke label, copy failure, clear
   assert.match(src, /aria-live="polite"/);
   assert.match(src, /setConfirming\(null\);\s*setError\(""\)/);
 });
+
+test("copy status is announced by an always-mounted live region", () => {
+  const src = readFileSync("components/console/KeyManager.tsx", "utf8");
+  assert.match(src, /<p aria-live="polite"[^>]*>\{copied \? "Copied" : ""\}<\/p>/);
+  assert.doesNotMatch(src, /<span aria-live/);
+});

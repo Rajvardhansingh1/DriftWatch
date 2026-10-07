@@ -96,13 +96,14 @@ export function KeyManager({
           <code className="mt-3 block break-all rounded bg-bg px-3 py-2 font-mono text-xs">{created.key}</code>
           <div className="mt-3 flex gap-3">
             <button onClick={() => copy(created.key)} className="rounded border border-line px-3 py-1.5 text-sm hover:border-dim">
-              {copied ? <span aria-live="polite">Copied</span> : "Copy key"}
+              {copied ? "Copied" : "Copy key"}
             </button>
             <button onClick={() => { setCreated(null); setCopyFailed(false); }} className="rounded bg-stable px-3 py-1.5 text-sm font-medium text-bg">
               I have saved it
             </button>
           </div>
-          <p aria-live="polite" className="mt-2 text-xs text-alert">
+          <p aria-live="polite" className="mt-2 text-xs text-dim">{copied ? "Copied" : ""}</p>
+          <p aria-live="polite" className="text-xs text-alert">
             {copyFailed ? "Copy failed. Select the key above and copy it manually." : ""}
           </p>
           <details className="mt-4 text-xs text-dim">
