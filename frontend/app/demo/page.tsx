@@ -17,6 +17,7 @@ import { FreeTextQuery } from "@/components/FreeTextQuery";
 import { QuotaBadge } from "@/components/QuotaBadge";
 import { ScenarioControls } from "@/components/ScenarioControls";
 import { SignalChart } from "@/components/SignalChart";
+import { SIGNAL_PANELS } from "@/lib/panels";
 import type {
   QuotaState,
   ScenarioName,
@@ -43,22 +44,6 @@ const EMPTY_SCENARIO_STATE: ScenarioState = {
   injection_active: false,
   distribution_shift_active: false,
 };
-
-// higherIsBetter mirrors monitor/scoring/combined_score.py's
-// _HIGHER_IS_BETTER - canary_accuracy/judge_trend are quality scores
-// (higher = better), every other signal is a drift magnitude (higher = worse).
-const SIGNAL_PANELS: {
-  key: keyof SignalSeries;
-  title: string;
-  color: string;
-  higherIsBetter?: boolean;
-}[] = [
-  { key: "embedding_drift", title: "embedding drift", color: "#3DDC97" },
-  { key: "self_consistency", title: "self-consistency disagreement", color: "#3DDC97" },
-  { key: "canary_accuracy", title: "canary accuracy", color: "#F2B84B", higherIsBetter: true },
-  { key: "judge_trend", title: "judge trend", color: "#F2B84B", higherIsBetter: true },
-  { key: "hallucination_score", title: "hallucination score", color: "#FF5C5C" },
-];
 
 export default function DashboardPage() {
   const [awake, setAwake] = useState(false);
