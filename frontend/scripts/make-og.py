@@ -50,7 +50,7 @@ d.text((m, 200 * S), "DriftWatch", font=plex("IBM Plex Sans", 76, 600), fill=FG)
 promise = plex("IBM Plex Sans", 36, 400)
 d.text((m, 310 * S), "Notice when your LLM app", font=promise, fill=FG)
 d.text((m, 358 * S), "gets quietly worse.", font=promise, fill=FG)
-d.text((m, 470 * S), "Watches live outputs over time. Never touches traffic.",
+d.text((m, 470 * S), "Watches live outputs over time. Never changes requests or responses.",
        font=plex("IBM Plex Mono", 20), fill=MUTED)
 
 img.resize((W, H), Image.LANCZOS).save("public/og.png", optimize=True)
