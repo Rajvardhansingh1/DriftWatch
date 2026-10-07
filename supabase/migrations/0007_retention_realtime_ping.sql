@@ -17,6 +17,8 @@ create policy "signal_hourly_select_member" on public.signal_hourly
   for select using (private.is_project_member(project_id, 'viewer'));
 grant select on public.signal_hourly to authenticated;
 
+create index signal_records_occurred_at_idx on public.signal_records (occurred_at);
+
 create function private.rollup_and_prune() returns void
 language plpgsql
 security definer

@@ -97,3 +97,10 @@ def test_keepalive_workflow_pings_supabase_daily():
     text = (root / ".github" / "workflows" / "supabase-keepalive.yml").read_text(encoding="utf-8")
     assert "cron:" in text and "/rest/v1/rpc/ping" in text
     assert "secrets.SUPABASE_ANON_KEY" in text
+
+
+def test_0007_indexes_occurred_at_for_nightly_prune():
+    sql = _sql("0007_retention_realtime_ping.sql")
+    idx = "create index signal_records_occurred_at_idx on public.signal_records (occurred_at);"
+    assert idx in sql
+    assert sql.index(idx) < sql.index("create function private.rollup_and_prune()")

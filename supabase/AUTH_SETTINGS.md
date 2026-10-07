@@ -17,4 +17,6 @@ Verify each item in Dashboard > Authentication. Re-check after any project chang
 | Anonymous sign-ins | OFF | B1 |
 | CAPTCHA (Cloudflare Turnstile) | ON, **only after** the widget is deployed with `NEXT_PUBLIC_TURNSTILE_SITE_KEY` set on Vercel | B1. Turning it on first locks everyone out (R3). |
 
+GitHub disables scheduled workflows after 60 days of no repository activity; the keep-alive workflow then stops and Supabase pauses an idle free project after 7 more days. Push, or re-enable the workflow, at least every 8 weeks.
+
 Verified on: ____ by: ____
