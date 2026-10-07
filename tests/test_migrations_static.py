@@ -172,3 +172,7 @@ def test_0008_limit_counts_all_created_orgs_and_project_updates_restricted():
     down = (MIGRATIONS[0].parent.parent / "rollback" / "0008_down.sql").read_text(encoding="utf-8")
     assert down.index("revoke update (name, settings) on public.projects from authenticated;") < down.index(
         "grant update on public.projects to authenticated;")
+
+
+def test_0008_hard_denies_anon_on_projects():
+    assert "revoke all on public.projects from anon;" in _sql("0008_console_functions.sql")

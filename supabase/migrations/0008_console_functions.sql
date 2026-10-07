@@ -122,5 +122,6 @@ grant execute on function public.export_my_data() to authenticated;
 drop policy "projects_insert_admin" on public.projects;
 revoke insert on public.projects from authenticated;
 -- Clients may rename a project or change its settings, never move it between orgs.
+revoke all on public.projects from anon;
 revoke update on public.projects from authenticated;
 grant update (name, settings) on public.projects to authenticated;

@@ -93,6 +93,8 @@ do $$ begin
   exception when insufficient_privilege then null; end;
   begin perform public.export_my_data(); raise exception 'FAIL: anon export';
   exception when insufficient_privilege then null; end;
+  begin perform 1 from public.projects; raise exception 'FAIL: anon can select projects';
+  exception when insufficient_privilege then null; end;
 end $$;
 
 -- Guard: C owns an org with another active member (B), so delete_my_account must refuse.

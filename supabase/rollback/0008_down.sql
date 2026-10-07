@@ -1,3 +1,4 @@
+-- anon revoke on public.projects is hardening and is intentionally not restored.
 grant insert on public.projects to authenticated;
 revoke update (name, settings) on public.projects from authenticated;
 grant update on public.projects to authenticated;
