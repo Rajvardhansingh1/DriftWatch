@@ -35,3 +35,9 @@ test("privacy names the sign-in cookies accurately", () => {
   assert.ok(!src.includes("The only cookie"));
   assert.match(src, /no third-party analytics/);
 });
+
+test("privacy does not call live features not live", () => {
+  const src = read("privacy");
+  assert.ok(!src.includes("These features are not live yet"));
+  assert.ok(src.includes("local agent is not available yet"));
+});

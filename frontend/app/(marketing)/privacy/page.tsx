@@ -34,14 +34,8 @@ export default function Privacy() {
           <li>A security log of actions such as creating or revoking a key and deleting your account. The deletion entry is stored without your identity.</li>
         </ul>
 
-        <h2 className={h2}>What we will store when you use projects and the local agent</h2>
-        <p className={p}>These features are not live yet. When they ship, this is how they will work. When you use projects and the local agent, we also store:</p>
-        <ul className={ul}>
-          <li>Your projects and the scores DriftWatch computes for them, with small metadata such as which signal and when.</li>
-          <li>Hashes of your project API keys. We cannot show a key again after you create it.</li>
-          <li>An audit log of security actions, such as creating or revoking a key.</li>
-        </ul>
-        <p className={p}>Raw prompts and responses stay on your machine. Only scores and small metadata are sent to us.</p>
+        <h2 className={h2}>What we will store when the local agent ships</h2>
+        <p className={p}>The local agent is not available yet. When it ships, it will send us the scores it computes, with small metadata such as which signal and when. Raw prompts and responses will stay on your machine.</p>
 
         <h2 className={h2}>How long we will keep scores</h2>
         <p className={p}>Raw scores will be kept for 30 days, then rolled up into hourly summaries.</p>
