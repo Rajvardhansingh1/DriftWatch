@@ -21,6 +21,7 @@ export function ProjectLive({ projectId, range, initial }: { projectId: string; 
 
   useEffect(() => {
     if (!live) return;
+    setStatus("connecting");
     const client = getSupabaseClient();
     if (!client) {
       setStatus("offline");

@@ -17,6 +17,8 @@ export default async function ProjectPage({
   if (!isUuid(projectId)) notFound();
   const supabase = await createServerSupabase();
   if (!supabase) redirect("/auth/sign-in");
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) redirect("/auth/sign-in");
   // Row-level security: someone else's project and a missing one look the same.
   const project = await getProject(supabase, projectId);
   if (!project) notFound();

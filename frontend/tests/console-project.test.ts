@@ -32,3 +32,17 @@ test("ProjectLive subscribes only for live ranges and cleans up", () => {
   assert.match(src, /return \(\) =>/); // effect cleanup
   assert.match(src, /COMBINED_PANEL/);
 });
+
+test("project page checks the user itself, in order: id, client, getUser, query", () => {
+  const src = readFileSync("app/dashboard/[projectId]/page.tsx", "utf8");
+  assert.match(src, /auth\.getUser\(\)/);
+  assert.doesNotMatch(src, /getSession\(/);
+  const i = (s: string) => src.indexOf(s);
+  assert.ok(i("isUuid(") < i("createServerSupabase("));
+  assert.ok(i("createServerSupabase(") < i("auth.getUser()"));
+  assert.ok(i("auth.getUser()") < i("getProject("));
+});
+
+test("ProjectLive resets status to connecting on resubscribe", () => {
+  assert.match(readFileSync("components/console/ProjectLive.tsx", "utf8"), /setStatus\("connecting"\)/);
+});
