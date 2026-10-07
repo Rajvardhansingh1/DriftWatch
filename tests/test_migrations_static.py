@@ -104,3 +104,25 @@ def test_0007_indexes_occurred_at_for_nightly_prune():
     idx = "create index signal_records_occurred_at_idx on public.signal_records (occurred_at);"
     assert idx in sql
     assert sql.index(idx) < sql.index("create function private.rollup_and_prune()")
+
+
+def test_0008_functions_are_safe_and_not_anon():
+    sql = _sql("0008_console_functions.sql")
+    fns = re.findall(r"create function [\w.]+\(.*?\n\$\$;", sql, flags=re.S)
+    assert len(fns) == 3
+    for fn in fns:
+        assert "set search_path = ''" in fn, fn[:60]
+    assert not re.search(r"to [^;]*\banon\b", sql)
+    for name in ("create_project(text)", "delete_my_account()", "export_my_data()"):
+        assert f"revoke all on function public.{name} from public, anon" in sql
+        assert f"grant execute on function public.{name} to authenticated" in sql
+
+
+def test_0008_delete_account_order_and_export_hides_key_hash():
+    sql = _sql("0008_console_functions.sql")
+    body = sql.split("create function public.delete_my_account")[1]
+    assert body.index("write_audit") < body.index("delete from public.organizations") < body.index("delete from auth.users")
+    assert "delete from public.project_api_keys where created_by" in body
+    export = sql.split("create function public.export_my_data")[1]
+    assert "key_hash" not in export
+    assert "limit 20000" in export
