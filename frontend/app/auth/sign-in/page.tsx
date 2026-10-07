@@ -11,6 +11,7 @@ export default function SignInPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const [message, setMessage] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | undefined>();
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   if (!isCloudAuthConfigured()) {
     return (
@@ -18,7 +19,7 @@ export default function SignInPage() {
         <h1 className="text-lg font-semibold">Cloud account sign-in</h1>
         <p className="mt-2 text-sm text-neutral-400">
           Cloud auth is not configured for this deployment. The local dashboard works fully
-          without a cloud account. <Link href="/" className="underline">Back to dashboard</Link>
+          without a cloud account. <Link href="/" className="underline">Back to home</Link>
         </p>
       </main>
     );
@@ -35,6 +36,9 @@ export default function SignInPage() {
       options: { captchaToken },
     });
     if (error) {
+      // Turnstile tokens are single-use: drop it and get a fresh challenge.
+      setCaptchaToken(undefined);
+      setCaptchaReset((n) => n + 1);
       setStatus("error");
       setMessage("That didn't work. Check your details, or your email for a confirmation link.");
       return;
@@ -63,7 +67,7 @@ export default function SignInPage() {
           onChange={(e) => setPassword(e.target.value)}
           className="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
         />
-        <Turnstile onToken={setCaptchaToken} />
+        <Turnstile onToken={(t) => setCaptchaToken(t || undefined)} resetKey={captchaReset} />
         <button
           type="submit"
           disabled={status === "loading"}
