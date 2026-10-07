@@ -82,15 +82,19 @@ test("FAQ and legal-facing copy is ASCII only", () => {
   }
 });
 
-test("deletion copy points at the Security page contact, never at an email", () => {
+const CONTACT = "singh.rajvardhan.it@gmail.com";
+
+test("deletion contact is the owner's real address and matches security.txt", () => {
   const acct = FAQ.find((f) => f.question.startsWith("What can I do with a DriftWatch account"))!;
+  // The FAQ also feeds JSON-LD: keep the address out of it and point at the Security page.
   assert.ok(acct.answer.includes("/.well-known/security.txt"));
-  assert.doesNotMatch(acct.answer, /email the|send an email|e-mail/i);
-  for (const page of ["privacy", "terms", "data-deletion"]) {
+  assert.ok(!acct.answer.includes("@"));
+  for (const page of ["privacy", "data-deletion"]) {
     const src = readFileSync(`app/(marketing)/${page}/page.tsx`, "utf8");
-    assert.doesNotMatch(src, /email the|send an email|e-mail us|email us/i, page);
+    assert.ok(src.includes(`mailto:${CONTACT}`), `${page} lacks the mailto contact`);
   }
-  assert.doesNotMatch(readFileSync("app/(marketing)/data-deletion/page.tsx", "utf8"), /email/i);
+  const sec = readFileSync("public/.well-known/security.txt", "utf8");
+  assert.ok(sec.includes(`Contact: mailto:${CONTACT}`));
 });
 
 // Vocabulary that is only true when a feature ships must be gated on that feature.

@@ -23,8 +23,11 @@ export default function DataDeletion() {
         <h1 className="text-3xl font-semibold">Delete your data</h1>
         <p className={p}>Last updated: 2026-10-07</p>
         <p className={p}>
-          To delete your account and data today, contact the maintainer using the contact listed on the{" "}
-          <a className="underline" href="/.well-known/security.txt">Security page</a> (/.well-known/security.txt).
+          To delete your account and data today, send a request to{" "}
+          <a className="underline" href="mailto:singh.rajvardhan.it@gmail.com">singh.rajvardhan.it@gmail.com</a>{" "}
+          from the address you signed up with. The{" "}
+          <a className="underline" href="/.well-known/security.txt">Security page</a> (/.well-known/security.txt)
+          lists the same contact.
         </p>
         <p className={p}>A self-serve option is planned.</p>
       </main>

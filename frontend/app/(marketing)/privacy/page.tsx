@@ -58,7 +58,10 @@ export default function Privacy() {
         <p className={p}>See <a className="underline" href="/data-deletion">how to delete your data</a>.</p>
 
         <h2 className={h2}>Contact</h2>
-        <p className={p}>Use the contact in <a className="underline" href="/.well-known/security.txt">security.txt</a>.</p>
+        <p className={p}>
+          Write to <a className="underline" href="mailto:singh.rajvardhan.it@gmail.com">singh.rajvardhan.it@gmail.com</a>.
+          The same contact is in <a className="underline" href="/.well-known/security.txt">security.txt</a>.
+        </p>
       </main>
     </>
   );
