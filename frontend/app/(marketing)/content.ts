@@ -118,7 +118,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "What can I do with a DriftWatch account today?",
     answer:
-      "Today an account lets you sign up, log in and log out. It is where your projects and synced scores will live once the local agent and web dashboard ship. The live demo works without an account. There is no self-serve deletion yet; to delete an account, contact the maintainer using the contact listed on the Security page (/.well-known/security.txt).",
+      "An account lets you create projects, make API keys and send events to a project with a plain HTTP call. Your scores update live on your dashboard. You can export your data or delete your account yourself in Settings. The local agent and command line are still to come, and the live demo needs no account.",
   },
   {
     question: "What are the limits of DriftWatch?",

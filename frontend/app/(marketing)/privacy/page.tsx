@@ -23,11 +23,15 @@ export default function Privacy() {
       <Nav />
       <main className="mx-auto max-w-3xl px-4 py-12 text-[var(--mk-fg)] sm:px-6">
         <h1 className="text-3xl font-semibold">Privacy</h1>
-        <p className={p}>Last updated: 2026-10-07</p>
+        <p className={p}>Last updated: 2026-10-08</p>
 
         <h2 className={h2}>What we store today</h2>
         <ul className={ul}>
           <li>Your account: your email address and a hashed password, managed by Supabase Auth.</li>
+          <li>Your projects (name only).</li>
+          <li>Details of your API keys: we store only a one-way hash of each key, so we cannot show it again, plus its name, creation time and last-use time.</li>
+          <li>The scores and event details you send to a project.</li>
+          <li>A security log of actions such as creating or revoking a key and deleting your account. The deletion entry is stored without your identity.</li>
         </ul>
 
         <h2 className={h2}>What we will store when you use projects and the local agent</h2>

@@ -5,6 +5,7 @@
 ## Pages
 - [Home](/): what DriftWatch measures and how it works
 - [Live demo](/demo): a shared demo dashboard you can push into drift with built-in scenarios
+- [Dashboard](/dashboard): sign-in required; create projects and API keys and watch scores live
 - [Privacy](/privacy): what data is stored and where
 
 ## Limits

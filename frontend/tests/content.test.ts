@@ -84,11 +84,13 @@ test("FAQ and legal-facing copy is ASCII only", () => {
 
 const CONTACT = "singh.rajvardhan.it@gmail.com";
 
-test("deletion contact is the owner's real address and matches security.txt", () => {
+test("account FAQ describes self-serve deletion; legal pages keep the contact", () => {
   const acct = FAQ.find((f) => f.question.startsWith("What can I do with a DriftWatch account"))!;
-  // The FAQ also feeds JSON-LD: keep the address out of it and point at the Security page.
-  assert.ok(acct.answer.includes("/.well-known/security.txt"));
+  // The FAQ also feeds JSON-LD: keep the address out of it.
+  assert.match(acct.answer, /Settings/);
+  assert.match(acct.answer, /delete/i);
   assert.ok(!acct.answer.includes("@"));
+  assert.doesNotMatch(acct.answer, /no self-serve|not available yet/i);
   for (const page of ["privacy", "data-deletion"]) {
     const src = readFileSync(`app/(marketing)/${page}/page.tsx`, "utf8");
     assert.ok(src.includes(`mailto:${CONTACT}`), `${page} lacks the mailto contact`);

@@ -10,10 +10,11 @@ for (const page of ["privacy", "terms", "data-deletion"]) {
   });
 }
 
-test("data-deletion does not promise a delete button and points at security.txt", () => {
+test("data-deletion describes self-serve deletion with a mailto fallback", () => {
   const src = read("data-deletion");
-  assert.ok(!src.includes("choose Delete account"));
-  assert.ok(src.includes("security.txt"));
+  assert.ok(src.includes("Settings"));
+  assert.ok(src.includes("Delete account"));
+  assert.ok(src.includes("security.txt") || src.includes("mailto:singh.rajvardhan.it@gmail.com"));
 });
 
 test("terms does not mention an allowance", () => {
