@@ -149,3 +149,13 @@ def test_0008_security_modes():
     for name in ("create_project", "delete_my_account"):
         body = sql.split(f"create function public.{name}")[1].split("$$;")[0]
         assert "security definer" in body
+
+
+def test_0008_closes_direct_project_insert_and_rollback_restores():
+    sql = _sql("0008_console_functions.sql")
+    assert 'drop policy "projects_insert_admin" on public.projects;' in sql
+    assert "revoke insert on public.projects from authenticated;" in sql
+    down = (MIGRATIONS[0].parent.parent / "rollback" / "0008_down.sql").read_text(encoding="utf-8")
+    assert "grant insert on public.projects to authenticated;" in down
+    assert 'create policy "projects_insert_admin" on public.projects for insert' in down
+    assert down.index("create policy") < down.index("drop function")

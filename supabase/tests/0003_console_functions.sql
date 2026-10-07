@@ -27,6 +27,14 @@ do $$ begin
   exception when sqlstate 'PT422' then null; end;
 end $$;
 
+-- Direct inserts are closed: projects only come from create_project.
+do $$ begin
+  begin insert into public.projects (organization_id, name)
+          values (current_setting('test.org')::uuid, 'sneaky');
+        raise exception 'FAIL: direct project insert allowed';
+  exception when insufficient_privilege then null; end;
+end $$;
+
 -- A's export has A's data, key metadata, and no key_hash.
 do $$
 declare e jsonb := public.export_my_data();

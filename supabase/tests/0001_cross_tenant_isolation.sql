@@ -17,9 +17,8 @@ set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
 
-select set_config('test.org_a', (public.create_organization('Org A')).id::text, true);
-insert into public.projects (organization_id, name)
-values (current_setting('test.org_a')::uuid, 'Project A');
+-- Projects are created only through create_project (0008), which also makes the personal org.
+select set_config('test.proj_a', (public.create_project('Project A')).id::text, true);
 
 select set_config('test.a_counts',
   (select count(*) from public.organizations) || ',' ||

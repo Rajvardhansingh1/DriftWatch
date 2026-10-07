@@ -9,10 +9,10 @@ insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) value
 set local role authenticated;
 select set_config('request.jwt.claims',
   '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', true);
-select set_config('test.org_a', (public.create_organization('Org A')).id::text, true);
-insert into public.projects (organization_id, name)
-  values (current_setting('test.org_a')::uuid, 'P-A');
-select set_config('test.proj_a', (select id::text from public.projects limit 1), true);
+-- Projects are created only through create_project (0008), which also makes the personal org.
+select set_config('test.proj_a', (public.create_project('P-A')).id::text, true);
+select set_config('test.org_a', (select organization_id::text from public.projects
+  where id = current_setting('test.proj_a')::uuid), true);
 select set_config('test.key_a',
   public.create_project_api_key(current_setting('test.proj_a')::uuid, 'laptop'), true);
 

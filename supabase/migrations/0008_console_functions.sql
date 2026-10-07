@@ -114,3 +114,7 @@ as $$
 $$;
 revoke all on function public.export_my_data() from public, anon;
 grant execute on function public.export_my_data() to authenticated;
+
+-- Projects are created only through create_project (limit + audit). Close the direct-insert path.
+drop policy "projects_insert_admin" on public.projects;
+revoke insert on public.projects from authenticated;
