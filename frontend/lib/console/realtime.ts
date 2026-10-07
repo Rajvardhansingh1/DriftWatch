@@ -24,6 +24,7 @@ function toStatus(raw: string): LiveStatus {
   return "connecting";
 }
 
+// Unique topic per subscription: supabase-js hands back a still-leaving channel for a reused topic.
 // INSERT only, one project: Postgres-changes DELETE events bypass row-level
 // security, and the nightly prune would flood every subscriber.
 export function subscribeToProject(
@@ -34,7 +35,7 @@ export function subscribeToProject(
 ): () => void {
   if (!isUuid(projectId)) throw new Error("invalid project id");
   const channel = client
-    .channel(`project-${projectId}`)
+    .channel(`project-${projectId}-${crypto.randomUUID()}`)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "signal_records", filter: `project_id=eq.${projectId}` },

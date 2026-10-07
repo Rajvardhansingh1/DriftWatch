@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { hourlyToSeries, rowsToSeries } from "./series";
+import { hourlyToSeries, MAX_POINTS, rowsToSeries, SIGNAL_NAMES } from "./series";
 import { rangeToSince, type Range } from "./validate";
 import type { SignalSeries } from "@/lib/types";
 
@@ -34,15 +34,22 @@ export async function loadSeries(client: SupabaseClient, projectId: string, rang
     if (error) throw new Error("series unavailable");
     return hourlyToSeries((data ?? []) as { signal: string; hour: string; avg_value: number }[]);
   }
-  const { data, error } = await client
-    .from("signal_records")
-    .select("signal,value,occurred_at")
-    .eq("project_id", projectId)
-    .gte("occurred_at", since)
-    .order("occurred_at", { ascending: false })
-    .limit(3000);
-  if (error) throw new Error("series unavailable");
-  return rowsToSeries((data ?? []) as { signal: string; value: number; occurred_at: string }[]);
+  // ponytail: ceilings are 500 points per signal (raw ranges) and 5000 hourly rows (30d); one query per
+  // signal so a chatty signal cannot starve the others. Upgrade: aggregate 7d from hourly + last day raw.
+  const results = await Promise.all(
+    SIGNAL_NAMES.map((name) =>
+      client
+        .from("signal_records")
+        .select("signal,value,occurred_at")
+        .eq("project_id", projectId)
+        .eq("signal", name)
+        .gte("occurred_at", since)
+        .order("occurred_at", { ascending: false })
+        .limit(MAX_POINTS),
+    ),
+  );
+  if (results.some((r) => r.error)) throw new Error("series unavailable");
+  return rowsToSeries(results.flatMap((r) => (r.data ?? []) as { signal: string; value: number; occurred_at: string }[]));
 }
 
 export async function listKeys(client: SupabaseClient, projectId: string): Promise<KeyRow[]> {

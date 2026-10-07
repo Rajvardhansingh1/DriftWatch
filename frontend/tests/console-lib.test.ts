@@ -4,7 +4,8 @@ import { SIGNAL_PANELS, COMBINED_PANEL } from "../lib/panels";
 import {
   isLiveRange, isUuid, parseKeyName, parseProjectName, parseRange, rangeToSince,
 } from "../lib/console/validate";
-import { appendPoint, emptySeries, hourlyToSeries, rowsToSeries } from "../lib/console/series";
+import { appendPoint, emptySeries, hourlyToSeries, rowsToSeries, SIGNAL_NAMES } from "../lib/console/series";
+import { loadSeries } from "../lib/console/data";
 import { subscribeToProject, type ClientLike } from "../lib/console/realtime";
 
 test("panels: five detector panels plus combined, canary and judge are higher-is-better", () => {
@@ -80,6 +81,7 @@ test("hourlyToSeries maps avg_value", () => {
 
 test("subscribeToProject listens to INSERT on one project only and reports status", () => {
   const calls: { on?: [string, Record<string, unknown>]; removed?: boolean } = {};
+  const names: string[] = [];
   let statusCb: ((s: string) => void) | undefined;
   let rowCb: ((p: { new: unknown }) => void) | undefined;
   const channel = {
@@ -89,7 +91,7 @@ test("subscribeToProject listens to INSERT on one project only and reports statu
     subscribe(cb?: (s: string) => void) { statusCb = cb; return channel; },
   };
   const client: ClientLike = {
-    channel: () => channel,
+    channel: (name: string) => { names.push(name); return channel; },
     removeChannel: () => { calls.removed = true; },
   };
   const rows: unknown[] = [];
@@ -107,9 +109,42 @@ test("subscribeToProject listens to INSERT on one project only and reports statu
   assert.equal(rows.length, 1);
   stop();
   assert.equal(calls.removed, true);
+  assert.match(names[0], /^project-11111111-1111-4111-8111-111111111111-[0-9a-f-]{36}$/);
+  subscribeToProject(client, "11111111-1111-4111-8111-111111111111", () => {}, () => {});
+  assert.notEqual(names[0], names[1]);
 });
 
 test("subscribeToProject refuses a non-uuid project id", () => {
   const client = { channel() { throw new Error("must not subscribe"); }, removeChannel() {} } as unknown as ClientLike;
   assert.throws(() => subscribeToProject(client, "x; drop", () => {}, () => {}));
+});
+
+function fakeClient(log: { table: string; calls: [string, unknown[]][] }[]) {
+  return {
+    from(table: string) {
+      const entry = { table, calls: [] as [string, unknown[]][] };
+      log.push(entry);
+      const q: Record<string, unknown> = {};
+      for (const m of ["select", "eq", "gte", "order", "limit"]) {
+        q[m] = (...args: unknown[]) => { entry.calls.push([m, args]); return q; };
+      }
+      q.then = (res: (v: unknown) => unknown) => res({ data: [], error: null });
+      return q;
+    },
+  } as never;
+}
+
+test("loadSeries raw ranges issue one limited query per signal; 30d reads hourly", async () => {
+  const log: { table: string; calls: [string, unknown[]][] }[] = [];
+  await loadSeries(fakeClient(log), "p1", "24h");
+  assert.equal(log.length, 6);
+  const names = log.map((l) => l.calls.find(([m, a]) => m === "eq" && a[0] === "signal")![1][1]);
+  assert.deepEqual(names, SIGNAL_NAMES);
+  for (const l of log) {
+    assert.equal(l.table, "signal_records");
+    assert.deepEqual(l.calls.find(([m]) => m === "limit")![1], [500]);
+  }
+  const hourly: typeof log = [];
+  await loadSeries(fakeClient(hourly), "p1", "30d");
+  assert.deepEqual(hourly.map((l) => l.table), ["signal_hourly"]);
 });
