@@ -14,13 +14,19 @@ export function CreateProjectForm() {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const result = await createProject(name);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await createProject(name);
+      if (!result.ok) {
+        setError(result.error);
+        setBusy(false);
+        return;
+      }
+      // stay busy until navigation so a double click cannot create two projects
+      router.push(`/dashboard/${result.id}`);
+    } catch {
+      setError("Could not create the project. Check your connection and try again.");
+      setBusy(false);
     }
-    router.push(`/dashboard/${result.id}`);
   }
 
   return (
@@ -28,6 +34,8 @@ export function CreateProjectForm() {
       <label className="flex flex-col gap-1 text-xs text-dim">
         Project name
         <input
+          name="projectName"
+          autoComplete="off"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={64}

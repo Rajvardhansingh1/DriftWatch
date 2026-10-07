@@ -7,6 +7,8 @@ import { createServerSupabase } from "@/lib/supabase/server";
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
   if (!supabase) redirect("/auth/sign-in");
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) redirect("/auth/sign-in");
   const projects = await listProjects(supabase);
   return (
     <main>
