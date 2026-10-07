@@ -51,7 +51,8 @@ export const MODES: { title: string; text: string; needs?: Feature[] }[] = [
 
 export const KEYS: { title: string; text: string; needs?: Feature[] }[] = [
   { title: "Start free", text: "A small allowance on our provider key, enough to try DriftWatch on a real app.", needs: ["freeKey"] },
-  { title: "Bring your own key", text: "Stored in your system keychain when you run locally, or encrypted in the cloud and never shown again.", needs: ["cli"] },
+  { title: "Bring your own key", text: "Kept in your system keychain on your machine; it never leaves it.", needs: ["cli"] },
+  { title: "Keys in the cloud", text: "If you connect a model from the web, the key is stored encrypted and is never shown again.", needs: ["cloudConnect"] },
 ];
 
 // Later scope. Each item shows in the "Coming soon" section until all of its
@@ -95,13 +96,13 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "Who pays for the LLM calls DriftWatch makes?",
     answer:
-      "Each account gets a small free allowance on our key, enough to try DriftWatch on a real app. After that, add your own provider key. Locally it stays in your system keychain and never leaves your machine. If you connect a model from the cloud, the key is encrypted and never shown again.",
+      "Each account gets a small free allowance on our key, enough to try DriftWatch on a real app. When it runs out, add your own provider key and keep going on your own account with your provider. You can also bring your own key from the start and skip the allowance entirely if you would rather not use ours.",
     needs: ["freeKey"],
   },
   {
     question: "Does DriftWatch send my prompts and responses to the cloud?",
     answer:
-      "Not by default. Text-based checks run on your machine, and only scores and a little metadata reach your account. The exception is the LLM judge: it sends a sample of answers to your model provider, or through our relay if you are on the free allowance, so the judge can grade them.",
+      "Not by default. Text-based checks run on your machine, and only scores and a little metadata reach your account. The exception is the LLM judge: it sends a small sample of answers to the model provider you use, so that the judge model can grade them against its rubric.",
     needs: ["cli"],
   },
   {
@@ -117,7 +118,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "What can I do with a DriftWatch account today?",
     answer:
-      "Today an account lets you sign up, log in and log out. It is where your projects and synced scores will live once the local agent and web dashboard ship. The live demo works without an account. There is no self-serve deletion yet, so to delete an account, email the address on the Security page.",
+      "Today an account lets you sign up, log in and log out. It is where your projects and synced scores will live once the local agent and web dashboard ship. The live demo works without an account. There is no self-serve deletion yet; to delete an account, contact the maintainer using the contact listed on the Security page (/.well-known/security.txt).",
   },
   {
     question: "What are the limits of DriftWatch?",

@@ -2,8 +2,15 @@ import { Nav } from "../components/Nav";
 
 export const metadata = {
   title: "Terms",
+  description: "The terms for using the DriftWatch website and live demo.",
   alternates: { canonical: "/terms" },
-  openGraph: { url: "/terms" },
+  openGraph: {
+    type: "website",
+    url: "/terms",
+    title: "Terms",
+    description: "The terms for using the DriftWatch website and live demo.",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
+  },
 };
 
 const p = "mt-3 leading-7 text-[var(--mk-muted)]";

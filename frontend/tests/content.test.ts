@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { enabledFeatures, isLive } from "../lib/features";
+import { readFileSync } from "node:fs";
 import { FAQ, HERO, SITE, HOW_TO_STEPS, KEYS, MODES, ROADMAP, SIGNALS } from "../app/(marketing)/content";
 import { buildLd, serializeLd } from "../lib/seo/jsonld";
 
@@ -73,4 +74,40 @@ test("serializeLd cannot break out of the script tag", () => {
 
 test("meta description fits a search snippet", () => {
   assert.ok(SITE.description.length >= 120 && SITE.description.length <= 160, String(SITE.description.length));
+});
+
+test("FAQ and legal-facing copy is ASCII only", () => {
+  for (const s of allStrings({ FAQ, HERO, HOW_TO_STEPS, KEYS, MODES, ROADMAP, SIGNALS })) {
+    assert.match(s, /^[\x20-\x7e]*$/, `non-ASCII in: ${s}`);
+  }
+});
+
+test("deletion copy points at the Security page contact, never at an email", () => {
+  const acct = FAQ.find((f) => f.question.startsWith("What can I do with a DriftWatch account"))!;
+  assert.ok(acct.answer.includes("/.well-known/security.txt"));
+  assert.doesNotMatch(acct.answer, /email the|send an email|e-mail/i);
+  for (const page of ["privacy", "terms", "data-deletion"]) {
+    const src = readFileSync(`app/(marketing)/${page}/page.tsx`, "utf8");
+    assert.doesNotMatch(src, /email the|send an email|e-mail us|email us/i, page);
+  }
+  assert.doesNotMatch(readFileSync("app/(marketing)/data-deletion/page.tsx", "utf8"), /email/i);
+});
+
+// Vocabulary that is only true when a feature ships must be gated on that feature.
+const VOCAB: { re: RegExp; flag: string }[] = [
+  { re: /keychain|driftwatch init|pip install/i, flag: "cli" },
+  { re: /encrypted|connect a model|from the web/i, flag: "cloudConnect" },
+  { re: /free allowance|relay/i, flag: "freeKey" },
+];
+
+test("copy vocabulary is gated on the feature it describes", () => {
+  const groups: Record<string, { needs?: string[] }[]> = { KEYS, MODES, HOW_TO_STEPS, FAQ, ROADMAP };
+  for (const [name, entries] of Object.entries(groups)) {
+    for (const e of entries) {
+      const text = allStrings(Object.fromEntries(Object.entries(e).filter(([k]) => k !== "needs"))).join(" ");
+      for (const { re, flag } of VOCAB) {
+        if (re.test(text)) assert.ok(e.needs?.includes(flag), `${name}: needs ${flag} for ${re}: ${text.slice(0, 60)}`);
+      }
+    }
+  }
 });

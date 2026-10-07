@@ -19,3 +19,18 @@ test("data-deletion does not promise a delete button and points at security.txt"
 test("terms does not mention an allowance", () => {
   assert.ok(!/allowance/i.test(read("terms")));
 });
+
+for (const page of ["privacy", "terms", "data-deletion"]) {
+  test(`${page} keeps the OG image and type in its own openGraph`, () => {
+    const src = read(page);
+    assert.ok(src.includes("og.png"));
+    assert.ok(src.includes('type: "website"'));
+  });
+}
+
+test("privacy names the sign-in cookies accurately", () => {
+  const src = read("privacy");
+  assert.ok(src.includes("short-lived sign-in verifier"));
+  assert.ok(!src.includes("The only cookie"));
+  assert.match(src, /no third-party analytics/);
+});

@@ -2,8 +2,15 @@ import { Nav } from "../components/Nav";
 
 export const metadata = {
   title: "Privacy",
+  description: "What DriftWatch stores today, what it will store later, and how to delete your data.",
   alternates: { canonical: "/privacy" },
-  openGraph: { url: "/privacy" },
+  openGraph: {
+    type: "website",
+    url: "/privacy",
+    title: "Privacy",
+    description: "What DriftWatch stores today, what it will store later, and how to delete your data.",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
+  },
 };
 
 const h2 = "mt-8 text-xl font-semibold text-[var(--mk-fg)]";
@@ -42,7 +49,7 @@ export default function Privacy() {
         <p className={p}>The sign-in and sign-up forms may use Cloudflare Turnstile, a bot check. It processes limited browser data under Cloudflare&apos;s terms.</p>
 
         <h2 className={h2}>Cookies and analytics</h2>
-        <p className={p}>The only cookie is the session cookie used to keep you signed in. The site sets no third-party analytics at launch.</p>
+        <p className={p}>The site sets only cookies needed for signing in (the session and a short-lived sign-in verifier). It sets no third-party analytics at launch.</p>
 
         <h2 className={h2}>Where</h2>
         <p className={p}>Supabase hosts the database and sign-in. Vercel hosts the website. Render hosts the demo API.</p>
