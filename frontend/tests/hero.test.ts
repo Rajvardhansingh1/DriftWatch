@@ -21,3 +21,9 @@ test("hero uses plain three.js, not fiber (fiber v8 breaks on Next 15's React)",
   assert.match(scene, /from "three"/);
   assert.doesNotMatch(scene, /@react-three\/fiber/);
 });
+
+test("hero falls back to the static image when the WebGL context is lost", () => {
+  assert.ok(scene.includes("webglcontextlost"));
+  assert.ok(scene.includes('removeEventListener("webglcontextlost"'));
+  assert.match(visual, /onContextLost=\{\(\) => setMode\("static"\)\}/);
+});

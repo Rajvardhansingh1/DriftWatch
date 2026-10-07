@@ -61,7 +61,7 @@ export function HeroVisual() {
   if (mode === "static") return <StaticHero />;
   return (
     <SceneBoundary>
-      <HeroScene />
+      <HeroScene onContextLost={() => setMode("static")} />
     </SceneBoundary>
   );
 }

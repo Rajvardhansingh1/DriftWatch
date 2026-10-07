@@ -12,19 +12,20 @@ export function LiveDemoTeaser() {
 
   useEffect(() => {
     let done = false;
-    const timer = setTimeout(() => { if (!done) setState({ kind: "asleep" }); }, 8000);
+    let cancelled = false;
+    const timer = setTimeout(() => { if (!done && !cancelled) setState({ kind: "asleep" }); }, 8000);
     getScore()
-      .then((s) => { done = true; setState({ kind: "ok", score: s.score, alert: s.alert }); })
-      .catch(() => { done = true; setState({ kind: "asleep" }); })
+      .then((s) => { done = true; if (!cancelled) setState({ kind: "ok", score: s.score, alert: s.alert }); })
+      .catch(() => { done = true; if (!cancelled) setState({ kind: "asleep" }); })
       .finally(() => clearTimeout(timer));
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   return (
     <div className="mk-tilt rounded-lg border border-[var(--mk-line)] bg-[var(--mk-surface)] p-6">
       <p className="text-sm text-[var(--mk-muted)]">Live demo, combined drift score right now</p>
-      <div className="mt-3 h-12" aria-live="polite">
-        {state.kind === "loading" && <Skeleton label="Loading live demo score" className="h-10 w-40" />}
+      <div className="mt-3 min-h-12" aria-live="polite">
+        {state.kind === "loading" && <Skeleton label="Loading live demo score" className="h-10 w-40" announce={false} />}
         {state.kind === "ok" && (
           <p className="font-[var(--font-plex-mono)] text-4xl">
             {state.score.toFixed(2)}

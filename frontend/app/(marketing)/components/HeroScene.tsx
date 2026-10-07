@@ -13,8 +13,10 @@ const PALETTE = {
 
 // A cloud of answers. Every seventh point drifts away from the cluster and
 // back, the way a slice of outputs drifts from the baseline.
-export default function HeroScene() {
+export default function HeroScene({ onContextLost }: { onContextLost?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
+  const lost = useRef(onContextLost);
+  lost.current = onContextLost;
 
   useEffect(() => {
     const el = host.current;
@@ -23,6 +25,12 @@ export default function HeroScene() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     el.appendChild(renderer.domElement);
+    const canvas = renderer.domElement;
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      lost.current?.();
+    };
+    canvas.addEventListener("webglcontextlost", onLost);
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     camera.position.z = 4.2;
     const scene = new THREE.Scene();
@@ -116,6 +124,7 @@ export default function HeroScene() {
       dark.removeEventListener("change", paint);
       geometry.dispose();
       material.dispose();
+      canvas.removeEventListener("webglcontextlost", onLost);
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();

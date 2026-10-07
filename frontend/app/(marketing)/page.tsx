@@ -46,7 +46,7 @@ export default function LandingPage() {
           </ul>
         </section>
 
-        <section id="how" aria-labelledby="try-title" className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <section id="how" aria-labelledby="try-title" className="scroll-mt-20 mx-auto max-w-6xl px-4 py-16 sm:px-6">
           <h2 id="try-title" className="mb-6 text-2xl font-semibold">How can I try it right now?</h2>
           <p className="mb-6 max-w-2xl text-[var(--mk-muted)]">
             Open the live demo, push the bot into drift with one of the scenarios, and watch the signals react.
@@ -97,7 +97,7 @@ export default function LandingPage() {
 
         <ComingSoonSection items={upcoming} />
 
-        <section id="faq" aria-labelledby="faq-title" className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+        <section id="faq" aria-labelledby="faq-title" className="scroll-mt-20 mx-auto max-w-3xl px-4 py-16 sm:px-6">
           <h2 id="faq-title" className="text-2xl font-semibold">Questions</h2>
           <div className="mt-6 divide-y divide-[var(--mk-line)]">
             {live(FAQ).map((f) => (

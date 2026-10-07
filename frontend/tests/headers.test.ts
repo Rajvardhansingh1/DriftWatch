@@ -23,3 +23,10 @@ test("public CSP excludes app routes and forbids framing and plugins", async () 
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /object-src 'none'/);
 });
+
+test("HSTS does not preload until a production domain is chosen", async () => {
+  const rules: Rule[] = await nextConfig.headers();
+  const all = rules.find((r) => r.source === "/:path*")!;
+  const hsts = all.headers.find((h) => h.key === "Strict-Transport-Security")!.value;
+  assert.equal(hsts, "max-age=63072000; includeSubDomains");
+});
