@@ -48,3 +48,10 @@ test("privacy discloses the key prefix and what remains in the security log", ()
   assert.ok(src.includes("Earlier log entries keep a random identifier that no longer links to you after you delete your account."));
   assert.ok(!read("data-deletion").includes("download all your data"));
 });
+
+test("privacy says what a command-line sign-in request stores and for how long", () => {
+  const src = read("privacy");
+  assert.match(src, /sign in from the command line/i);
+  assert.match(src, /device name/i);
+  assert.match(src, /up to one day/i);
+});

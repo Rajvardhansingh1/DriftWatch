@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { enabledFeatures, isLive } from "../lib/features";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { FAQ, HERO, SITE, HOW_TO_STEPS, KEYS, MODES, ROADMAP, SIGNALS } from "../app/(marketing)/content";
 import { buildLd, serializeLd } from "../lib/seo/jsonld";
 
@@ -115,5 +115,15 @@ test("copy vocabulary is gated on the feature it describes", () => {
         if (re.test(text)) assert.ok(e.needs?.includes(flag), `${name}: needs ${flag} for ${re}: ${text.slice(0, 60)}`);
       }
     }
+  }
+});
+
+test("the install command is the real package name everywhere, never the unrelated `driftwatch` on PyPI", () => {
+  assert.equal(HOW_TO_STEPS[0].command, "pip install driftwatch-llm");
+  const walk = (d: string): string[] =>
+    readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]));
+  for (const f of [...walk("app"), ...walk("public"), ...walk("lib")]) {
+    if (!/\.(tsx?|txt|md|json)$/.test(f)) continue;
+    assert.doesNotMatch(readFileSync(f, "utf8"), /pip install driftwatch(?![-\w])/, `${f} names the wrong package`);
   }
 });

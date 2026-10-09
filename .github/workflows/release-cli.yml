@@ -1,0 +1,53 @@
+name: release-cli
+
+# Publishes driftwatch-llm to PyPI with trusted publishing (OIDC): no API token exists anywhere.
+# One-time setup by the owner: a pending trusted publisher on PyPI for project `driftwatch-llm`
+# (repo Rajvardhansingh1/DriftWatch, workflow release-cli.yml, environment pypi), and a `pypi`
+# environment in the repo settings with a required reviewer. Then push a tag such as cli-v0.1.0.
+on:
+  push:
+    tags: ["cli-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: The tag must match the package version
+        if: startsWith(github.ref_name, 'cli-v')
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' driftwatch_llm/__init__.py)"
+          test -n "$version"
+          test "cli-v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+      - run: pip install typer httpx keyring platformdirs pytest pytest-asyncio hatchling build
+      # --confcutdir skips tests/conftest.py, which imports the server settings this job does not install
+      - run: pytest tests/cli -q --confcutdir=tests/cli
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/driftwatch-llm/
+    permissions:
+      id-token: write # the only job that can mint the OIDC token PyPI trusts
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      # v1.14.2, pinned to a commit so a moved tag cannot change what runs here
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33

@@ -39,7 +39,7 @@ export const SIGNALS = [
 ];
 
 export const HOW_TO_STEPS: { name: string; command: string; text: string; needs: Feature[] }[] = [
-  { name: "Install", command: "pip install driftwatch", text: "Install the package into the same Python environment as your app.", needs: ["cli"] },
+  { name: "Install", command: "pip install driftwatch-llm", text: "Install the package into the same Python environment as your app.", needs: ["cli"] },
   { name: "Link your project", command: "driftwatch init", text: "Sign in through the browser and link this folder to a DriftWatch project.", needs: ["cli"] },
   { name: "Open the dashboard", command: "driftwatch dashboard", text: "See live scores on your machine, or log in on the website to see the same data.", needs: ["cli"] },
 ];
@@ -59,7 +59,7 @@ export const KEYS: { title: string; text: string; needs?: Feature[] }[] = [
 // features are listed in NEXT_PUBLIC_FEATURES; then it leaves that section and
 // the matching section above (how-to, modes, keys) starts rendering instead.
 export const ROADMAP: { title: string; text: string; needs: Feature[] }[] = [
-  { title: "Local agent and CLI", text: "Run pip install driftwatch and driftwatch init, and a small agent watches your app whenever it runs.", needs: ["cli"] },
+  { title: "Local agent and CLI", text: "Run pip install driftwatch-llm and driftwatch init, and a small agent watches your app whenever it runs.", needs: ["cli"] },
   { title: "Local and web dashboards in sync", text: "driftwatch dashboard on your machine, and the same live charts on this site after you log in.", needs: ["cli"] },
   { title: "Free allowance and your own keys", text: "Try it on our key with a small limit, then switch to your own provider key whenever you like.", needs: ["freeKey"] },
   { title: "Connect a model from the web", text: "Add a model from your dashboard and DriftWatch runs scheduled checks against it, with nothing to install.", needs: ["cloudConnect"] },
@@ -84,7 +84,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "How do I monitor my own LLM app with DriftWatch?",
     answer:
-      "Install the package with pip install driftwatch, then run driftwatch init inside your project folder. It signs you in through the browser, creates a project and stores its key in your system keychain. From then on, a small background agent starts whenever your Python app runs. Run driftwatch dashboard to see it.",
+      "Install the package with pip install driftwatch-llm, then run driftwatch init inside your project folder. It signs you in through the browser, creates a project and stores its key in your system keychain. From then on, a small background agent starts whenever your Python app runs. Run driftwatch dashboard to see it.",
     needs: ["cli"],
   },
   {
