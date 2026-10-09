@@ -47,3 +47,32 @@ def test_new_definer_functions_pin_empty_search_path():
         for fn in re.findall(r"create function [\w.]+\(.*?\n\$\$;", sql, flags=re.S):
             if "security definer" in fn:
                 assert "set search_path = ''" in fn, f"{path.name}: {fn[:70]}"
+
+
+def test_no_tracked_file_is_covered_by_gitignore():
+    # Anything tracked but matching an ignore rule is a build artifact or local file that slipped in.
+    out = subprocess.run(
+        ["git", "ls-files", "-ci", "--exclude-standard"], cwd=ROOT, capture_output=True, text=True, check=True
+    )
+    assert out.stdout.split() == [], out.stdout
+
+
+def test_gitignore_keeps_secrets_and_local_files_out():
+    patterns = {
+        line.strip() for line in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines() if line.strip()
+    }
+    for must in (
+        ".env", ".env.*", "!.env.example", "*.pem", "*.key", "credentials.json", ".mcp.json", ".claude/",
+        ".driftwatch/", "node_modules/", ".next/", "*.tsbuildinfo", ".vercel/", "*.sqlite3", "Docs/",
+    ):
+        assert must in patterns, f".gitignore lost {must}"
+
+
+def test_gitleaks_allowlists_are_narrow():
+    text = (ROOT / ".gitleaks.toml").read_text(encoding="utf-8")
+    blocks = text.split("[[allowlists]]")[1:]
+    assert blocks, "expected at least one allowlist"
+    for block in blocks:
+        # Each entry must need BOTH a path and a value to match, and the path must be anchored.
+        assert 'condition = "AND"' in block, block[:80]
+        assert "paths = ['''^" in block and "regexes = [" in block, block[:80]

@@ -1,0 +1,19 @@
+title = "DriftWatch gitleaks config"
+
+[extend]
+useDefault = true
+
+# Each allowlist below is narrow on purpose: one file (or folder) AND one exact value.
+# Do not widen these. A real secret must never match.
+
+[[allowlists]]
+description = "Supabase publishable key pinned in the CLI. Public by design: it only identifies the project to the API gateway and grants nothing."
+condition = "AND"
+paths = ['''^driftwatch_llm/endpoints\.py$''']
+regexes = ['''sb_publishable_[A-Za-z0-9_-]+''']
+
+[[allowlists]]
+description = "Obviously fake project key used as a test fixture (dw_0123456789_ plus a run of the letter a)."
+condition = "AND"
+paths = ['''^tests/cli/''']
+regexes = ['''dw_0123456789_''']

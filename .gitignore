@@ -1,64 +1,94 @@
-# Python
+# ---------------------------------------------------------------------------
+# DriftWatch .gitignore
+# Rule of thumb: nothing that holds a secret, a local path, a build output or
+# runtime data belongs in git. If a pattern here ever stops matching a file you
+# need, fix the pattern; do not force-add the file.
+# ---------------------------------------------------------------------------
+
+# --- Secrets and local environment ------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.yaml
+# Local tooling config: points assistants at a Supabase project, and local
+# permission settings can hold tokens.
+.mcp.json
+.claude/
+# A folder linked with `driftwatch init` (project id only). Stays on the machine.
+.driftwatch/
+
+# --- Python ---------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 .Python
-*.egg-info/
-dist/
-build/
-.eggs/
-*.egg
 .venv/
 venv/
 env/
-.env
-*.env.local
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+wheelhouse/
+*.whl
 
-# Pytest / coverage / Playwright
+# --- Test, coverage and lint output ----------------------------------------
 .pytest_cache/
-.playwright-cli/
-.coverage
-htmlcov/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
 .tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.playwright-cli/
+playwright-report/
+test-results/
 
-# Runtime-generated data / reports
+# --- Node / Next.js (frontend) ---------------------------------------------
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Runtime data, databases and reports ------------------------------------
 *.db
+*.db-journal
 *.sqlite
 *.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 eval_reports/
 data/baseline_embeddings/
 data/canary_probes/
 data/synthetic_degradation/
+logs/
+*.log
 
-# Node / Next.js
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/.vercel/
-frontend/.env.local
-frontend/.env*.local
+# --- Local planning and scratch (kept out of the public repo) ---------------
+# Docs/ holds specs, plans and decision logs. It is NOT backed up by git: copy
+# it somewhere safe (a private repo, cloud drive) if you change machines.
+Docs/
+.superpowers/
 
-# OS
+# --- OS and editors ----------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Logs
-*.log
-logs/
-
-# Internal planning / spec docs — not for production repo
-Docs/
-
-# SDD scratch workspace
-.superpowers/
-
-# Dev-only MCP config (points tooling at a Supabase project)
-.mcp.json
