@@ -7,7 +7,15 @@ MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
 
 # Functions intentionally callable without signing in. Adding a name here is a
 # security decision: it needs a reviewer and a line in the PR description.
-ANON_EXECUTABLE_ALLOWLIST = {"public.ingest_event", "public.ping"}
+ANON_EXECUTABLE_ALLOWLIST = {
+    "public.ingest_event",
+    "public.ping",
+    # Plan 3 (0009): the CLI has no session. Reviewed: each needs a 256-bit secret
+    # or only creates a capped pending row.
+    "public.start_device_login",
+    "public.poll_device_login",
+    "public.revoke_api_key_by_secret",
+}
 
 
 def _git_tracked() -> set[str]:
