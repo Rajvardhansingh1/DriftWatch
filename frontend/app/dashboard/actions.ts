@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
-  createKeyCore, createProjectCore, deleteAccountCore, revokeKeyCore, type ActionResult,
+  approveDeviceCore, createKeyCore, createProjectCore, deleteAccountCore, denyDeviceCore,
+  inspectDeviceCore, revokeKeyCore, type ActionResult,
 } from "@/lib/console/actions-core";
+import type { DeviceRequest } from "@/lib/console/device";
 
 async function authed() {
   const supabase = await createServerSupabase();
@@ -49,4 +51,26 @@ export async function deleteAccount(typedEmail: string): Promise<ActionResult> {
     }
   }
   return r;
+}
+
+// CLI device login. Server actions only accept same-origin POSTs, which is the CSRF
+// protection the approval needs; the RPCs run as the signed-in user.
+export async function inspectDevice(
+  rawCode: string,
+): Promise<ActionResult<{ code: string; device: DeviceRequest }>> {
+  const a = await authed();
+  if (!a) return SIGN_IN;
+  return inspectDeviceCore(a.supabase, rawCode);
+}
+
+export async function approveDevice(rawCode: string, projectId: string, confirmed: boolean): Promise<ActionResult> {
+  const a = await authed();
+  if (!a) return SIGN_IN;
+  return approveDeviceCore(a.supabase, rawCode, projectId, confirmed);
+}
+
+export async function denyDevice(rawCode: string): Promise<ActionResult> {
+  const a = await authed();
+  if (!a) return SIGN_IN;
+  return denyDeviceCore(a.supabase, rawCode);
 }
