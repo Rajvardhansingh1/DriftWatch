@@ -10,10 +10,11 @@ for (const page of ["privacy", "terms", "data-deletion"]) {
   });
 }
 
-test("data-deletion does not promise a delete button and points at security.txt", () => {
+test("data-deletion describes self-serve deletion with a mailto fallback", () => {
   const src = read("data-deletion");
-  assert.ok(!src.includes("choose Delete account"));
-  assert.ok(src.includes("security.txt"));
+  assert.ok(src.includes("Settings"));
+  assert.ok(src.includes("Delete account"));
+  assert.ok(src.includes("security.txt") || src.includes("mailto:singh.rajvardhan.it@gmail.com"));
 });
 
 test("terms does not mention an allowance", () => {
@@ -33,4 +34,17 @@ test("privacy names the sign-in cookies accurately", () => {
   assert.ok(src.includes("short-lived sign-in verifier"));
   assert.ok(!src.includes("The only cookie"));
   assert.match(src, /no third-party analytics/);
+});
+
+test("privacy does not call live features not live", () => {
+  const src = read("privacy");
+  assert.ok(!src.includes("These features are not live yet"));
+  assert.ok(src.includes("local agent is not available yet"));
+});
+
+test("privacy discloses the key prefix and what remains in the security log", () => {
+  const src = read("privacy");
+  assert.ok(src.includes("a short display prefix of the key"));
+  assert.ok(src.includes("Earlier log entries keep a random identifier that no longer links to you after you delete your account."));
+  assert.ok(!read("data-deletion").includes("download all your data"));
 });

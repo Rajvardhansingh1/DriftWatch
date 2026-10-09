@@ -1,6 +1,6 @@
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const apiUrl = process.env.NEXT_PUBLIC_MONITOR_API_URL || "";
-const wss = supabaseUrl.replace(/^https:/, "wss:");
+const wss = supabaseUrl.replace(/^http/, "ws"); // https->wss, http->ws (local Supabase)
 
 // Public pages are static and take no user input. App routes (/dashboard,
 // /admin, /auth) get a stricter nonce-based CSP from middleware.ts instead.

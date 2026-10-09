@@ -41,3 +41,16 @@ for (const path of ["/dashboard", "/admin"]) {
     }
   });
 }
+
+test("console CSP allows the Realtime websocket for https and plain-http (local) Supabase", async () => {
+  for (const [url, ws] of [["https://example.supabase.co", "wss://example.supabase.co"], ["http://127.0.0.1:54321", "ws://127.0.0.1:54321"]]) {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = url;
+    try {
+      const res = await middleware(new NextRequest("http://localhost:3000/auth/sign-in"));
+      const connect = res.headers.get("content-security-policy")!.split("; ").find((d) => d.startsWith("connect-src"))!;
+      assert.ok(connect.split(" ").includes(ws), connect);
+    } finally {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    }
+  }
+});
