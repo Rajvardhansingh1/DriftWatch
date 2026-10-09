@@ -122,3 +122,44 @@ test("device server actions check the session first and stay server-side", () =>
   }
   assert.doesNotMatch(src, /auth\.getSession\(/); // comments may mention it; calls may not
 });
+
+// ---- /auth/device page --------------------------------------------------------
+
+test("device page validates the user server-side before reading projects", () => {
+  const src = readFileSync("app/auth/device/page.tsx", "utf8");
+  const order = ["createServerSupabase(", "auth.getUser(", "listProjects("].map((s) => src.indexOf(s));
+  assert.ok(order.every((i) => i >= 0), "all calls present");
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  assert.doesNotMatch(src, /auth\.getSession\(/);
+  assert.match(src, /normalizeUserCode\(/); // the prefilled code is normalised, never echoed raw
+  assert.match(src, /robots:\s*\{\s*index:\s*false/);
+  assert.match(src, /redirect\(/);
+});
+
+test("device approval component warns about phishing and gates Approve on the checkbox", () => {
+  const src = readFileSync("components/console/DeviceApprove.tsx", "utf8");
+  assert.match(src.trimStart(), /^"use client";/);
+  assert.match(src, /If someone else gave you this code, choose Deny/);
+  assert.match(src, /chose this name itself/);
+  assert.match(src, /I started this sign-in myself/);
+  assert.match(src, /disabled=\{[^}]*!confirmed/); // Approve disabled until ticked
+  for (const call of ["inspectDevice(", "approveDevice(", "denyDevice(", "createProject("]) {
+    assert.ok(src.includes(call), call);
+  }
+  assert.match(src, /catch/);
+  assert.match(src, /finally\s*\{\s*setBusy\(false\)/);
+  assert.doesNotMatch(src, /localStorage|sessionStorage|document\.cookie|console\./);
+  assert.doesNotMatch(src, /router\.(push|replace)\([^)]*code/i); // the code never goes into a URL we build
+  assert.doesNotMatch(src, /dangerouslySetInnerHTML/);
+});
+
+test("sign-in honours a safe next path and sign-up carries it through the email link", () => {
+  const signIn = readFileSync("app/auth/sign-in/page.tsx", "utf8");
+  assert.match(signIn, /safeNextPath\(/);
+  assert.match(signIn, /window\.location\.search/);
+  assert.doesNotMatch(signIn, /window\.location\.href = "\/dashboard"/);
+  assert.match(signIn, /\/auth\/sign-up\?next=/);
+  const signUp = readFileSync("app/auth/sign-up/page.tsx", "utf8");
+  assert.match(signUp, /safeNextPath\(/);
+  assert.match(signUp, /encodeURIComponent\(/);
+});

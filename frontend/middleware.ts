@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED = ["/dashboard", "/admin"];
+const PROTECTED = ["/dashboard", "/admin", "/auth/device"];
 
 function buildCsp(nonce: string): string {
   const dev = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
@@ -40,7 +40,9 @@ export async function middleware(request: NextRequest) {
   const redirectToSignIn = () => {
     const to = request.nextUrl.clone();
     to.pathname = "/auth/sign-in";
-    to.search = "";
+    // The CLI sign-in link carries a code; keep it so the user lands back on it after signing in.
+    // sign-in re-validates `next` with safeNextPath before using it.
+    to.search = path === "/auth/device" ? `?next=${encodeURIComponent(path + request.nextUrl.search)}` : "";
     return NextResponse.redirect(to);
   };
 
