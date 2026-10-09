@@ -17,11 +17,11 @@ from typing import Any, Mapping
 
 from driftwatch_llm import paths
 from driftwatch_llm.fileutil import write_private
+from driftwatch_llm.validate import is_uuid
 
 SERVICE = "driftwatch-llm"
 ENV_VAR = "DRIFTWATCH_API_KEY"
 KEY_RE = re.compile(r"^dw_[0-9a-f]{10}_[0-9a-f]{64}$")
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 class SecretError(ValueError):
@@ -101,7 +101,7 @@ class SecretStore:
     # -- public API -----------------------------------------------------------
     def save(self, project_id: str, key: str) -> str:
         """Store `key` for the project. Returns where it went: "keychain" or "file"."""
-        if not isinstance(project_id, str) or not _UUID_RE.match(project_id):
+        if not is_uuid(project_id):
             raise SecretError("invalid project id")
         if not isinstance(key, str) or not KEY_RE.match(key):
             raise SecretError("invalid API key format")
@@ -124,7 +124,7 @@ class SecretStore:
 
     def load(self, project_id: str) -> tuple[str, str] | None:
         """Return (key, source) with source in {"keychain", "env", "file"}, or None."""
-        if not isinstance(project_id, str) or not _UUID_RE.match(project_id):
+        if not is_uuid(project_id):
             return None
         kr = self._kr()
         if kr is not None:
@@ -148,7 +148,7 @@ class SecretStore:
 
     def delete(self, project_id: str) -> None:
         """Remove this machine's stored key for the project (never touches the environment)."""
-        if not isinstance(project_id, str) or not _UUID_RE.match(project_id):
+        if not is_uuid(project_id):
             return
         kr = self._kr()
         if kr is not None:
