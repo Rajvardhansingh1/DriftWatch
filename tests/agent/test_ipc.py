@@ -56,6 +56,7 @@ def roundtrip(conn, payload: bytes):
 GOOD = [
     {"type": "hello", "pid": 123, "python": "3.14.2", "sdks": {"openai": {"version": "1.40.0", "status": "patched"}}},
     {"type": "heartbeat", "pid": 123},
+    {"type": "heartbeat", "pid": 123, "stats": {"captured": 5, "dropped": 0}},
     {"type": "capture", "project_id": PID, "provider": "openai", "model": "gpt-x", "text": "hello", "latency_ms": 12.5},
     {"type": "capture", "project_id": PID, "provider": "groq", "model": None, "text": "hi", "latency_ms": None},
     {"type": "status"},
@@ -95,6 +96,8 @@ def test_one_connection_serves_many_requests(server, home):
         b'{"type": "capture", "project_id": "%s", "provider": "openai", "model": "m"}' % PID.encode(),
         b'{"type": "baseline", "action": "delete-everything", "project_id": "%s"}' % PID.encode(),
         b'{"type": "hello", "pid": "abc"}',
+        b'{"type": "heartbeat", "pid": 1, "stats": {"a": "not a number"}}',
+        b'{"type": "heartbeat", "pid": 1, "stats": [1]}',
         b"\xff\xfe\x00",
     ],
 )
@@ -215,7 +218,8 @@ def test_the_agent_code_never_uses_the_pickle_paths_of_multiprocessing_connectio
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
-        for m in re.finditer(r"\.(recv|send)\(", text):
+        # Connection.send / Connection.recv pickle. IpcClient.send is our own JSON method and is fine.
+        for m in re.finditer(r"\.recv\(|\w*conn\w*\.send\(", text):
             offenders.append(f"{path.name}: {m.group(0)}")
         if re.search(r"^\s*(import|from)\s+pickle\b", text, re.M):
             offenders.append(f"{path.name}: pickle")

@@ -144,6 +144,13 @@ def parse_message(raw: bytes) -> dict[str, Any]:
             out["sdks"] = clean
     elif kind == "heartbeat":
         out["pid"] = _int(msg.get("pid"), "pid")
+        if "stats" in msg:
+            stats = msg["stats"]
+            if not isinstance(stats, dict) or len(stats) > 8:
+                raise ProtocolError("stats must be an object with at most 8 entries")
+            out["stats"] = {
+                _str(k, "stat name", 1, 32): _int(v, "stat value") for k, v in stats.items()
+            }
     elif kind == "capture":
         out["project_id"] = _uuid(msg.get("project_id"))
         out["provider"] = _str(msg.get("provider"), "provider", 1, 32)
