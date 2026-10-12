@@ -28,6 +28,36 @@ class ApiError(Exception):
     """A failed call. The message is safe to print."""
 
 
+class AuthRejected(ApiError):
+    """The server says this project key is not valid (revoked or unknown). Retrying cannot help."""
+
+
+class Rejected(ApiError):
+    """The server refused the event itself (contract violation). Retrying cannot help."""
+
+
+class TransientError(ApiError):
+    """Network problem, rate limit or server error. The same event is safe to send again later."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+_MAX_RETRY_AFTER = 3600.0
+
+
+def _retry_after(headers: httpx.Headers) -> float | None:
+    raw = headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        seconds = float(raw)
+    except ValueError:
+        return None  # an HTTP date: ignore, the normal backoff applies
+    return min(max(seconds, 0.0), _MAX_RETRY_AFTER)
+
+
 @dataclass(frozen=True)
 class DeviceStart:
     device_code: str
@@ -138,3 +168,45 @@ class Api:
 
     def revoke_api_key(self, api_key: str) -> None:
         self._rpc("revoke_api_key_by_secret", {"p_api_key": api_key}, want_json=False)
+
+    def ingest_event(self, api_key: str, event: dict[str, Any]) -> str:
+        """Deliver one event with a project key. Returns "accepted" or "duplicate".
+
+        Raises AuthRejected (key revoked or unknown), Rejected (the event itself was refused) or
+        TransientError (anything worth retrying). Messages never contain the key or the event.
+        """
+        url = f"{self._ep.supabase_url}/rest/v1/rpc/ingest_event"
+        headers = {
+            "apikey": self._ep.publishable_key,
+            "content-type": "application/json",
+            "user-agent": f"driftwatch-llm/{__version__}",
+        }
+        try:
+            with httpx.Client(transport=self._transport, timeout=self._timeout, follow_redirects=False) as client:
+                response = client.post(url, json={"p_api_key": api_key, "p_event": event}, headers=headers)
+        except httpx.HTTPError:
+            raise TransientError(_UNREACHABLE) from None
+        if response.status_code >= 400:
+            try:
+                body: object = response.json()
+            except ValueError:
+                body = None
+            code = body.get("code") if isinstance(body, dict) else None
+            message = body.get("message") if isinstance(body, dict) else None
+            if code == "PT401":
+                raise AuthRejected("DriftWatch rejected the project key (it may have been revoked).")
+            if code == "PT422":
+                text = clean_text(message, 120)
+                raise Rejected(text if text and isinstance(message, str) and len(message) <= 120 else "The event was not accepted.")
+            if response.status_code == 429 or code == "PT429":
+                raise TransientError("DriftWatch is rate limiting this machine. Will retry.", _retry_after(response.headers))
+            raise TransientError(
+                f"DriftWatch had a problem (HTTP {response.status_code}). Try again later.", _retry_after(response.headers)
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            raise TransientError(_UNEXPECTED) from None
+        if data not in ("accepted", "duplicate") or not isinstance(data, str):
+            raise TransientError(_UNEXPECTED)
+        return data
