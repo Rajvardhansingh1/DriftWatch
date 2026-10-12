@@ -76,3 +76,17 @@ def test_gitleaks_allowlists_are_narrow():
         # Each entry must need BOTH a path and a value to match, and the path must be anchored.
         assert 'condition = "AND"' in block, block[:80]
         assert "paths = ['''^" in block and "regexes = [" in block, block[:80]
+
+
+def test_ci_secret_scan_loads_the_allowlist_with_a_pinned_gitleaks():
+    import yaml
+
+    ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    step = next(s for s in ci["jobs"]["secrets"]["steps"] if str(s.get("uses", "")).startswith("gitleaks/gitleaks-action"))
+    env = step["env"]
+    # The action only auto-detects `gitleaks.toml`, so the dotted file must be named explicitly,
+    # and the plural [[allowlists]] syntax needs gitleaks 8.25+, so the version must be pinned.
+    assert env["GITLEAKS_CONFIG"] == ".gitleaks.toml"
+    assert (ROOT / env["GITLEAKS_CONFIG"]).is_file()
+    major, minor, *_ = (int(x) for x in env["GITLEAKS_VERSION"].split("."))
+    assert (major, minor) >= (8, 25), env["GITLEAKS_VERSION"]
