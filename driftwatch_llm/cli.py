@@ -56,6 +56,7 @@ class Services:
     device_os: str | None = None
     # Local agent and autostart (None means the real thing; tests inject fakes)
     agent_client: Callable[[], Any] | None = None
+    ensure_agent: Callable[[], bool] | None = None
     install_hook: Callable[[], Path] | None = None
     remove_hook: Callable[[], list[Path]] | None = None
     hook_installed: Callable[[], Path | None] | None = None

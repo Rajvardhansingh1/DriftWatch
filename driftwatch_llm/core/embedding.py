@@ -19,15 +19,19 @@ class OnnxEmbedder:
         return np.stack(list(self._model.embed(texts)))
 
 
-def make_embedder(kind: str):
-    """"onnx" builds the fastembed (ONNX) embedder; anything else builds sentence-transformers (torch)."""
+def make_embedder(kind: str, local_only: bool = False):
+    """"onnx" builds the fastembed (ONNX) embedder; anything else builds sentence-transformers (torch).
+
+    local_only=True never touches the network: it raises if the model is not already cached."""
     if kind == "onnx":
         from fastembed import TextEmbedding
 
-        return OnnxEmbedder(TextEmbedding(f"sentence-transformers/{MODEL_NAME}"))
+        extra = {"local_files_only": True} if local_only else {}
+        return OnnxEmbedder(TextEmbedding(f"sentence-transformers/{MODEL_NAME}", **extra))
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(MODEL_NAME)
+    extra = {"local_files_only": True} if local_only else {}
+    return SentenceTransformer(MODEL_NAME, **extra)
 
 
 def _median_heuristic_gamma(x: np.ndarray, y: np.ndarray) -> float:

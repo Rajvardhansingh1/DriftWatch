@@ -30,7 +30,11 @@ def _default_embedder() -> Any:
 
     # "onnx" (fastembed, the [agent] extra) by default. DRIFTWATCH_AGENT_EMBEDDER=sentence-transformers uses an
     # installed torch/sentence-transformers instead: the same model, handy where that is already installed.
-    return embedding.make_embedder(os.environ.get("DRIFTWATCH_AGENT_EMBEDDER", "onnx"))
+    kind = os.environ.get("DRIFTWATCH_AGENT_EMBEDDER", "onnx")
+    try:
+        return embedding.make_embedder(kind, local_only=True)  # a cached model loads without any network check
+    except Exception:  # noqa: BLE001 - not cached yet (or unreadable): fall back to the normal, downloading load
+        return embedding.make_embedder(kind)
 
 
 class AgentRuntime:

@@ -35,6 +35,7 @@ WINDOW_SIZE = 20
 MIN_NEW_RESPONSES = 5
 MIN_INTERVAL_SECONDS = 60.0
 MAX_CHARS = 8000
+BACKLOG_SIZE = 200  # responses held while the model loads
 EMBEDDER_NAME = "minilm-l6-v2"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]+")
 
@@ -67,6 +68,7 @@ class Engine:
         min_new: int = MIN_NEW_RESPONSES,
         min_interval: float = MIN_INTERVAL_SECONDS,
         max_chars: int = MAX_CHARS,
+        backlog_size: int = BACKLOG_SIZE,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -79,10 +81,18 @@ class Engine:
         self._max_chars = max_chars
         self._lock = threading.RLock()
         self._projects: dict[str, _Project] = {}
+        # Responses that arrive while the model is still loading wait here, in memory only (never on disk), and are
+        # processed in order once it is ready. Bounded: the oldest are dropped (and counted) beyond backlog_size.
+        self._backlog: deque[tuple[str, str, str | None]] = deque()
+        self._backlog_size = backlog_size
 
     # -- embedder -----------------------------------------------------------------------
     def set_embedder(self, embedder: Any) -> None:
-        self._embedder = embedder
+        with self._lock:
+            self._embedder = embedder
+            pending, self._backlog = list(self._backlog), deque()
+            for project_id, text, model in pending:
+                self._process(project_id, text, model)
 
     @property
     def embedder_ready(self) -> bool:
@@ -140,9 +150,6 @@ class Engine:
 
     # -- capture ------------------------------------------------------------------------
     def _embed(self, text: str) -> np.ndarray | None:
-        if self._embedder is None:
-            self._store.bump("dropped_no_embedder")
-            return None
         try:
             out = np.asarray(self._embedder.encode([text]), dtype=np.float32)
             vec = out[0]
@@ -161,6 +168,17 @@ class Engine:
             self._store.bump("ignored_empty")
             return []
         text = text[: self._max_chars]
+        with self._lock:
+            if self._embedder is None:
+                if len(self._backlog) >= self._backlog_size:
+                    self._backlog.popleft()
+                    self._store.bump("dropped_no_embedder")
+                self._backlog.append((project_id, text, model))
+                self._store.bump("buffered_while_loading")
+                return []
+            return self._process(project_id, text, model)
+
+    def _process(self, project_id: str, text: str, model: str | None) -> list[dict[str, Any]]:
         with self._lock:
             proj = self._project(project_id)
             vec = self._embed(text)

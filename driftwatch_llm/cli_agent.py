@@ -160,6 +160,43 @@ def agent_status(ctx: typer.Context) -> None:
     typer.echo("counters: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in sorted(counters.items())))
 
 
+@agent_app.command("warmup")
+def agent_warmup(
+    ctx: typer.Context,
+    timeout: float = typer.Option(600.0, "--timeout", help="Seconds to wait for the model before giving up."),
+) -> None:
+    """Start the agent and wait until its model is loaded (the first run downloads about 90 MB)."""
+    s = _svc(ctx)
+    if s.ensure_agent is not None:
+        started = s.ensure_agent()
+    else:
+        from driftwatch_llm.agent.launcher import ensure_agent
+
+        started = ensure_agent(s.home)
+    if not started:
+        _fail("Could not start the agent. Check `driftwatch agent status`, or reinstall with: " + EXTRA_HINT.strip())
+    begun = s.clock()
+    told = False
+    while True:
+        reply = agent_for(s).send({"type": "status"})
+        st = reply.get("status") if reply and reply.get("ok") else None
+        embedder = st["embedder"] if st else "loading"
+        if embedder == "ready":
+            typer.echo("The model is ready. Monitoring starts scoring right away.")
+            return
+        if embedder.startswith("failed"):
+            _fail("The model could not be loaded. " + EXTRA_HINT.strip())
+        waited = s.clock() - begun
+        if waited >= timeout:
+            _fail(f"The model is still loading after {_uptime(waited)}. It keeps loading in the background; try `driftwatch agent warmup` again later.")
+        if not told:
+            typer.echo("Loading the model (the first run downloads about 90 MB)...")
+            told = True
+        elif waited >= 60 and int(waited) % 30 < 5:
+            typer.echo(f"  still loading ({_uptime(waited)}); a slow connection can take a few minutes. About 90 MB is being downloaded.")
+        s.sleep(2.0)
+
+
 @agent_app.command("stop")
 def agent_stop(ctx: typer.Context) -> None:
     """Ask the agent to stop (it starts again by itself when needed)."""

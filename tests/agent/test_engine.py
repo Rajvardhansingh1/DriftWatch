@@ -214,10 +214,32 @@ def test_an_embedder_failure_is_counted_and_does_not_stop_the_engine(store, cloc
     assert e.baseline_status(P1)["frozen"] is True
 
 
-def test_without_an_embedder_nothing_is_lost_silently(store, clock):
+def test_responses_that_arrive_while_the_model_loads_are_kept_and_replayed_in_order(store, clock):
     e = Engine(store, None, clock=clock, baseline_size=10, min_baseline=4)
-    assert e.capture(P1, "A: hello") == []
-    assert store.counter("dropped_no_embedder") == 1
+    for i in range(7):
+        assert e.capture(P1, f"A: early {i}") == []
+    assert store.counter("buffered_while_loading") == 7 and store.counter("dropped_no_embedder") == 0
+    assert e.baseline_status(P1)["collected"] == 0  # nothing is scored before the model is there
+    emb = ThemeEmbedder()
+    e.set_embedder(emb)  # the model finishes loading: the backlog is processed now
+    assert e.baseline_status(P1)["collected"] == 7 and emb.calls == 7
+    e.capture(P1, "A: after the load")
+    assert e.baseline_status(P1)["collected"] == 8
+
+
+def test_the_backlog_is_bounded_and_the_oldest_are_dropped_and_counted(store, clock):
+    e = Engine(store, None, clock=clock, baseline_size=10, min_baseline=4, backlog_size=3)
+    for i in range(5):
+        e.capture(P1, f"A: r{i}")
+    assert store.counter("dropped_no_embedder") == 2
     e.set_embedder(ThemeEmbedder())
-    e.capture(P1, "A: hello again")
-    assert e.baseline_status(P1)["collected"] == 1
+    assert e.baseline_status(P1)["collected"] == 3
+
+
+def test_a_replay_can_complete_the_baseline_and_emit_values(store, clock):
+    e = Engine(store, None, clock=clock, baseline_size=10, min_baseline=4)
+    for i in range(10):
+        e.capture(P1, f"A: baseline {i}")
+    e.set_embedder(ThemeEmbedder())
+    assert e.baseline_status(P1)["frozen"] is True
+    assert store.load_baseline(P1).shape == (10, 8)

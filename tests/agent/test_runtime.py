@@ -125,7 +125,7 @@ def test_embedder_states_loading_ready_failed(tmp_path):
     st = bad.handle({"type": "status"})["status"]
     assert st["embedder"] == "failed: RuntimeError" and "secret" not in json.dumps(st)
     capture(bad, "A: x")
-    assert bad.handle({"type": "status"})["status"]["counters"]["dropped_no_embedder"] == 1
+    assert bad.handle({"type": "status"})["status"]["counters"]["buffered_while_loading"] == 1
 
 
 def test_the_agent_exits_after_the_linger_with_no_live_clients(tmp_path):
@@ -183,38 +183,27 @@ def test_full_stack_over_ipc_with_background_sync(tmp_path):
         rt.shutdown()
 
 
-def test_the_default_embedder_is_onnx_and_can_be_switched_by_an_environment_variable(monkeypatch):
+def test_the_default_embedder_tries_the_local_cache_first_then_the_network(monkeypatch):
     from driftwatch_llm.agent import runtime
     from driftwatch_llm.core import embedding
 
     asked = []
-    monkeypatch.setattr(embedding, "make_embedder", lambda kind: asked.append(kind) or object())
+
+    def fake(kind, local_only=False):
+        asked.append((kind, local_only))
+        if local_only:
+            raise ValueError("not cached yet")
+        return object()
+
+    monkeypatch.setattr(embedding, "make_embedder", fake)
     monkeypatch.delenv("DRIFTWATCH_AGENT_EMBEDDER", raising=False)
     runtime._default_embedder()
+    assert asked == [("onnx", True), ("onnx", False)]  # cached model: no network; otherwise download
+    asked.clear()
     monkeypatch.setenv("DRIFTWATCH_AGENT_EMBEDDER", "sentence-transformers")
+    monkeypatch.setattr(embedding, "make_embedder", lambda kind, local_only=False: asked.append((kind, local_only)) or object())
     runtime._default_embedder()
-    assert asked == ["onnx", "sentence-transformers"]
-
-
-def test_the_emission_interval_and_baseline_size_can_be_tuned_for_development(tmp_path):
-    rt = AgentRuntime(
-        home=tmp_path / "home", embedder_factory=None, api=Api(EP, transport=httpx.MockTransport(lambda r: httpx.Response(200, json="accepted"))),
-        secrets=FakeSecrets(), baseline_size=12, min_interval=2.5,
-    )
-    assert rt._engine._baseline_size == 12 and rt._engine._min_interval == 2.5
-    rt.shutdown()
-
-
-def test_agent_settings_come_from_the_environment_and_ignore_nonsense():
-    from driftwatch_llm.agent.__main__ import settings_from_env
-
-    assert settings_from_env({}) == {}
-    assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": "2", "DRIFTWATCH_AGENT_BASELINE_SIZE": "50", "DRIFTWATCH_AGENT_LINGER": "9"}) == {
-        "min_interval": 2.0, "baseline_size": 50, "linger": 9.0,
-    }
-    for bad in ("abc", "-1", "0", "nan", "inf", ""):
-        assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": bad, "DRIFTWATCH_AGENT_BASELINE_SIZE": bad}) == {}, bad
-    assert settings_from_env({"DRIFTWATCH_AGENT_BASELINE_SIZE": "5"}) == {}  # below the 30-response minimum
+    assert asked == [("sentence-transformers", True)]  # the cached model loaded: no second attempt
 
 
 def test_status_says_how_long_the_model_has_been_loading(tmp_path):

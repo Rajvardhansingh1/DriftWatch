@@ -86,3 +86,22 @@ def test_the_server_imports_without_the_cli_and_agent_dependencies():
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={**__import__("os").environ, "DRIFTWATCH_FORCE_SIMULATED": "true"})
     assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stderr[-800:]
+
+
+def test_make_embedder_passes_local_files_only_only_when_asked(monkeypatch):
+    import sys
+    import types
+
+    seen = []
+
+    class FakeTE:
+        def __init__(self, name, **kwargs):
+            seen.append(kwargs)
+
+        def embed(self, texts):
+            return iter([])
+
+    monkeypatch.setitem(sys.modules, "fastembed", types.SimpleNamespace(TextEmbedding=FakeTE))
+    embedding.make_embedder("onnx")
+    embedding.make_embedder("onnx", local_only=True)
+    assert seen == [{}, {"local_files_only": True}]  # the server's behaviour is unchanged

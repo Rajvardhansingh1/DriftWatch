@@ -265,3 +265,59 @@ def test_agent_status_explains_a_slow_first_model_load(env):
     quick = dict(STATUS, embedder="loading", embedder_loading_seconds=12.0)
     env.agent.replies["status"] = {"ok": True, "status": quick}
     assert "90 MB" not in env.run("agent", "status").output  # no scary hint during a normal short load
+
+
+# ---- agent warmup -------------------------------------------------------------------------------------------------
+def clocked(env):
+    t = [0.0]
+    env.services.clock = lambda: t[0]
+    env.services.sleep = lambda seconds: t.__setitem__(0, t[0] + seconds)
+    env.services.ensure_agent = lambda: True
+    return t
+
+
+def sequence(env, states):
+    """The agent's status reply walks through `states` (each a dict of fields), then repeats the last."""
+    items = list(states)
+
+    def reply(msg):
+        st = dict(STATUS, **(items.pop(0) if len(items) > 1 else items[0]))
+        return {"ok": True, "status": st}
+
+    env.agent.replies["status"] = reply
+
+
+def test_warmup_waits_for_the_model_and_says_when_it_is_ready(env):
+    clocked(env)
+    sequence(env, [{"embedder": "loading", "embedder_loading_seconds": 3.0}, {"embedder": "loading", "embedder_loading_seconds": 15.0}, {"embedder": "ready"}])
+    r = env.run("agent", "warmup")
+    assert r.exit_code == 0, r.output
+    assert "loading" in r.output.lower() and "ready" in r.output.lower()
+
+
+def test_warmup_explains_a_slow_download_after_a_minute(env):
+    t = clocked(env)
+    sequence(env, [{"embedder": "loading", "embedder_loading_seconds": 90.0}] * 12 + [{"embedder": "ready"}])
+    r = env.run("agent", "warmup")
+    assert r.exit_code == 0 and "90 MB" in r.output
+
+
+def test_warmup_reports_a_failed_load_with_the_fix(env):
+    clocked(env)
+    sequence(env, [{"embedder": "failed: ImportError"}])
+    r = env.run("agent", "warmup")
+    assert r.exit_code == 1 and "driftwatch-llm[agent]" in r.output
+
+
+def test_warmup_gives_up_after_the_timeout(env):
+    clocked(env)
+    sequence(env, [{"embedder": "loading", "embedder_loading_seconds": 5.0}])
+    r = env.run("agent", "warmup", "--timeout", "30")
+    assert r.exit_code == 1 and "still loading" in r.output.lower()
+
+
+def test_warmup_when_the_agent_cannot_start(env):
+    clocked(env)
+    env.services.ensure_agent = lambda: False
+    r = env.run("agent", "warmup")
+    assert r.exit_code == 1 and "could not start" in r.output.lower()
