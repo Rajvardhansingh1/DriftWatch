@@ -18,11 +18,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from driftwatch_llm.core.backoff import (  # noqa: F401  (re-exported: tests and callers import them here)
+    BASE_DELAY_SECONDS,
+    MAX_ATTEMPTS,
+    MAX_DELAY_SECONDS,
+    backoff_seconds,
+)
 from monitor.db.models import SyncOutbox
 
-BASE_DELAY_SECONDS = 5
-MAX_DELAY_SECONDS = 15 * 60
-MAX_ATTEMPTS = 20
 
 
 def _utcnow() -> datetime:
@@ -61,12 +64,6 @@ def mark_sent(session: Session, row: SyncOutbox) -> None:
     row.status = "sent"
     row.last_error = None
     session.commit()
-
-
-def backoff_seconds(attempts: int, rng: Callable[[], float] = random.random) -> float:
-    """Bounded exponential backoff with full jitter on the upper half."""
-    capped = min(MAX_DELAY_SECONDS, BASE_DELAY_SECONDS * (2 ** attempts))
-    return capped * (0.5 + 0.5 * rng())
 
 
 def mark_failed(
