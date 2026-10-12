@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import platform
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +54,13 @@ class Services:
     clock: Callable[[], float] = time.monotonic
     device_name: str | None = None
     device_os: str | None = None
+    # Local agent and autostart (None means the real thing; tests inject fakes)
+    agent_client: Callable[[], Any] | None = None
+    install_hook: Callable[[], Path] | None = None
+    remove_hook: Callable[[], list[Path]] | None = None
+    hook_installed: Callable[[], Path | None] | None = None
+    run_command: Callable[[list[str], Path | None], int] | None = None
+    interactive: Callable[[], bool] | None = None
 
 
 def build_services(dev: bool, env: Mapping[str, str] | None = None) -> Services:
@@ -163,6 +171,9 @@ def init(
     ctx: typer.Context,
     force: bool = typer.Option(False, "--force", help="Link this folder again, even if it already has a config."),
     no_browser: bool = typer.Option(False, "--no-browser", help="Print the link instead of opening a browser."),
+    autostart: bool | None = typer.Option(
+        None, "--autostart/--no-autostart", help="Turn automatic monitoring on or off without asking."
+    ),
 ) -> None:
     """Sign in through your browser and link this folder to a DriftWatch project."""
     s = _svc(ctx)
@@ -207,6 +218,7 @@ def init(
     place = "your OS keychain" if where == "keychain" else "a private file in your user config folder"
     typer.echo(f'Linked to project "{result.project_name}" ({result.project_id}).')
     typer.echo(f"Key stored in {place}.")
+    offer_autostart(s, autostart)
 
 
 @app.command()
@@ -282,6 +294,9 @@ def status(ctx: typer.Context) -> None:
     """Show what this folder is linked to. Never prints a key."""
     s = _svc(ctx)
     typer.echo(f"server: {s.endpoints.web_origin}")
+    hook = hook_installed(s)
+    typer.echo(f"autostart: {'on' if hook else 'off'}")
+    typer.echo(f"agent: {agent_summary(s)}")
     root = find_project_root(s.cwd())
     if root is None:
         typer.echo("No DriftWatch project found from here. Run `driftwatch init` to link this folder.")
@@ -317,7 +332,17 @@ def uninstall(
         raise typer.Exit(1)
     s.secrets.delete_all()
     s.trust.clear()
-    remove_autostart_hook()
+    (s.remove_hook or remove_autostart_hook)()
+    try:
+        agent_for(s).send({"type": "stop"})
+        time.sleep(0.5)  # let it release its files
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+    shutil.rmtree(s.home / "agent", ignore_errors=True)
+    try:
+        (s.home / "notice.json").unlink()
+    except OSError:
+        pass
     try:
         s.home.rmdir()  # only succeeds when nothing else lives there
     except OSError:
@@ -329,3 +354,12 @@ def uninstall(
     typer.echo("Removed.")
     typer.echo("To finish, run: pip uninstall driftwatch-llm")
     typer.echo("Keys you created stay valid on the server until you revoke them on the keys page of the website.")
+
+
+# Registers the agent / autostart / baseline / run commands on `app` (imports names defined above).
+from driftwatch_llm.cli_agent import (  # noqa: E402
+    agent_for,
+    agent_summary,
+    hook_installed,
+    offer_autostart,
+)

@@ -56,5 +56,40 @@ def test_importing_the_package_touches_no_files_and_no_network(tmp_path):
         env={**__import__("os").environ, "DRIFTWATCH_HOME": str(home)},
     )
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == "0.1.0"
+    assert r.stdout.strip() == __import__("driftwatch_llm").__version__
     assert list(home.iterdir()) == []
+
+
+def _is_agent_extra(line: str) -> bool:
+    return "extra == 'agent'" in line or 'extra == "agent"' in line
+
+
+def test_wheel_ships_the_agent_capture_and_core_packages_and_declares_the_extra(wheel):
+    z = zipfile.ZipFile(wheel)
+    names = z.namelist()
+    for needed in (
+        "driftwatch_llm/agent/runtime.py", "driftwatch_llm/agent/launcher.py", "driftwatch_llm/agent/ipc.py",
+        "driftwatch_llm/capture/wrappers.py", "driftwatch_llm/capture/client.py", "driftwatch_llm/autostart.py",
+        "driftwatch_llm/core/events.py", "driftwatch_llm/core/scoring.py", "driftwatch_llm/_run/sitecustomize.py",
+    ):
+        assert needed in names, needed
+    assert not any(n.endswith(".pth") for n in names)  # installing the package still adds no hook
+    meta = z.read(next(n for n in names if n.endswith("/METADATA"))).decode("utf-8")
+    assert "Provides-Extra: agent" in meta
+    assert any(line.startswith("Requires-Dist: numpy") and _is_agent_extra(line) for line in meta.splitlines())
+    assert any(line.startswith("Requires-Dist: fastembed") and _is_agent_extra(line) for line in meta.splitlines())
+    # the light install must not pull the heavy packages
+    core = [l for l in meta.splitlines() if l.startswith("Requires-Dist:") and "extra ==" not in l]
+    assert not any("numpy" in l or "fastembed" in l for l in core)
+
+
+def test_the_capture_and_hook_modules_need_only_the_standard_library():
+    code = (
+        "import sys\n"
+        "for name in ('numpy', 'httpx', 'sqlite3', 'typer', 'keyring', 'fastembed'):\n"
+        "    sys.modules[name] = None\n"
+        "import driftwatch_llm.autostart, driftwatch_llm.capture.wrappers, driftwatch_llm.capture.client\n"
+        "print('ok')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
