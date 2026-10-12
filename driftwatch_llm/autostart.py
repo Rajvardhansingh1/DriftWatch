@@ -31,7 +31,7 @@ def _skipped(orig_argv: list[str] | None) -> bool:
     if args and args[0] == "-m" and len(args) > 1:
         target = args[1]
     elif args and not args[0].startswith("-"):
-        target = os.path.basename(args[0])
+        target = args[0].replace("\\", "/").rsplit("/", 1)[-1]  # both separators: a Windows path is not split by POSIX basename
     base = target.split(".")[0].lower()
     return base in _SKIP or target.startswith("driftwatch_llm")
 
