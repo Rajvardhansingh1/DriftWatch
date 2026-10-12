@@ -34,8 +34,8 @@ def main() -> int:
             embedder_factory=None if test_mode else _default_embedder,
             linger=float(os.environ.get("DRIFTWATCH_AGENT_LINGER", "30")),
         )
+        _record_start(directory)  # before serving: anyone who can reach the agent can already see this entry
         runtime.start()
-        _record_start(directory)
         try:
             while not runtime.tick():
                 time.sleep(1.0)
