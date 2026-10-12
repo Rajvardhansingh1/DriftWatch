@@ -98,6 +98,19 @@ def test_a_shifted_distribution_scores_far_higher_than_a_stable_one(store, clock
     assert h > s + 0.5 and h > 3 * s
 
 
+def test_each_drift_value_says_whether_its_window_is_full(store, clock):
+    e = make(store, clock)
+    feed(e, clock, P1, "A", 10)
+    first = feed(e, clock, P1, "A", 5, start=10)[0]
+    assert first["meta"]["current_n"] == 5 and first["meta"]["window_full"] is False
+    last = None
+    for batch in range(4):  # 5 more responses a minute apart, until the window of 20 is full
+        clock.now += 60
+        events = feed(e, clock, P1, "A", 5, start=15 + batch * 5, step=0.1)
+        last = events[0] if events else last
+    assert last["meta"]["current_n"] == 20 and last["meta"]["window_full"] is True
+
+
 def test_emission_is_throttled_to_one_a_minute(store, clock):
     e = make(store, clock)
     feed(e, clock, P1, "A", 10)

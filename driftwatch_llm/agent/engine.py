@@ -199,6 +199,9 @@ class Engine:
                 {
                     "baseline_n": len(proj.baseline),
                     "current_n": len(proj.window),
+                    # Early values (small window) are noisier: measured floor 0.06 mean / 0.12-0.18 worst at
+                    # windows of 5-10 versus 0.03 / 0.08 at 20 (scripts/measure_embedding_only.py).
+                    "window_full": len(proj.window) >= self._window_size,
                     "embedder": EMBEDDER_NAME,
                     "models": models,
                     "agent_version": __version__,
