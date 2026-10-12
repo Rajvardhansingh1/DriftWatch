@@ -181,3 +181,16 @@ def test_full_stack_over_ipc_with_background_sync(tmp_path):
         client.close()
     finally:
         rt.shutdown()
+
+
+def test_the_default_embedder_is_onnx_and_can_be_switched_by_an_environment_variable(monkeypatch):
+    from driftwatch_llm.agent import runtime
+    from driftwatch_llm.core import embedding
+
+    asked = []
+    monkeypatch.setattr(embedding, "make_embedder", lambda kind: asked.append(kind) or object())
+    monkeypatch.delenv("DRIFTWATCH_AGENT_EMBEDDER", raising=False)
+    runtime._default_embedder()
+    monkeypatch.setenv("DRIFTWATCH_AGENT_EMBEDDER", "sentence-transformers")
+    runtime._default_embedder()
+    assert asked == ["onnx", "sentence-transformers"]

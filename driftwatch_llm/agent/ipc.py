@@ -62,8 +62,15 @@ def agent_dir(home: Path | str | None = None) -> Path:
 
 
 def _home_hash(home: Path | str | None) -> str:
+    """The endpoint's name. It is derived from the secret key, so nobody without the key can compute it.
+
+    (It used to be a hash of the config path, which anyone who knew the username could predict and squat on.
+    Mutual authentication already stops a squatter from learning anything; an unpredictable name also stops
+    it from blocking the real agent.)
+    """
     base = os.path.normcase(str(Path(home if home is not None else paths.config_dir()).resolve()))
-    return hashlib.sha256(base.encode("utf-8")).hexdigest()[:16]
+    key = load_or_create_authkey(home)
+    return hmac.new(key, b"endpoint" + base.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
 
 
 def address_for(home: Path | str | None = None) -> str:

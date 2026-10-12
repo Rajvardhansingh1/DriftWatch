@@ -330,3 +330,15 @@ def test_the_socket_prefers_the_per_user_runtime_directory(tmp_path, monkeypatch
     assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
     monkeypatch.delenv("XDG_RUNTIME_DIR")
     assert "/driftwatch-" in ipc.address_for(tmp_path / "h")
+
+
+def test_the_endpoint_name_cannot_be_predicted_without_the_key(tmp_path):
+    """The old name was a hash of the config path: anyone who knew the username could compute it and squat on it."""
+    home = tmp_path / "h"
+    ipc.load_or_create_authkey(home)
+    address = ipc.address_for(home)
+    legacy = hashlib.sha256(os.path.normcase(str(home.resolve())).encode("utf-8")).hexdigest()
+    assert legacy[:16] not in address and legacy[:24] not in address
+    (home / "agent" / "agent.key").unlink()  # a new key means a new, equally unpredictable, name
+    ipc.load_or_create_authkey(home)
+    assert ipc.address_for(home) != address

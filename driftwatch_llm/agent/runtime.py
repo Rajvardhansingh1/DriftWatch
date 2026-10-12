@@ -26,9 +26,11 @@ PRUNE_EVERY = 3600.0
 
 
 def _default_embedder() -> Any:
-    from driftwatch_llm.core.embedding import make_embedder
+    from driftwatch_llm.core import embedding
 
-    return make_embedder("onnx")
+    # "onnx" (fastembed, the [agent] extra) by default. DRIFTWATCH_AGENT_EMBEDDER=sentence-transformers uses an
+    # installed torch/sentence-transformers instead: the same model, handy where that is already installed.
+    return embedding.make_embedder(os.environ.get("DRIFTWATCH_AGENT_EMBEDDER", "onnx"))
 
 
 class AgentRuntime:
