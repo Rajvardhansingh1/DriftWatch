@@ -3,9 +3,14 @@
 - Transport: `multiprocessing.connection` over a named pipe (Windows) or a Unix socket in a private
   directory. Only `send_bytes` / `recv_bytes` are used, carrying JSON. `send` / `recv` (pickle) are never
   called, so no peer can make this process unpickle anything.
-- Authentication: a challenge/response HMAC with a 32-byte key kept in `agent/agent.key` (mode 0600).
-  It runs in the connection's own thread with a timeout, so a client that connects and says nothing
-  cannot block anyone else (the stock `authkey=` handshake blocks the accept loop).
+- Authentication is MUTUAL: both sides prove they know the 32-byte key in `agent/agent.key` (mode 0600),
+  with different labels so a reply cannot be reflected. The client sends nothing but the handshake until the
+  server has proved it holds the key, so a listener squatting on the agent's address (another local user, or
+  another process) learns nothing. The handshake runs in the connection's own thread with a timeout, so a
+  client that connects and says nothing cannot block anyone else (the stock `authkey=` handshake blocks the
+  accept loop).
+- Endpoint: a per-user directory ($XDG_RUNTIME_DIR, else a private directory under the temp dir); the client
+  refuses a socket directory that is not owned by the current user or that others can write to.
 - Messages: at most 64 KB, validated field by field; unknown types and bad fields get an error reply.
 """
 
@@ -17,6 +22,7 @@ import json
 import math
 import os
 import re
+import stat
 import sys
 import tempfile
 import threading
@@ -32,7 +38,7 @@ MAX_MESSAGE = 64 * 1024
 HANDSHAKE_TIMEOUT = 5.0
 IDLE_TIMEOUT = 300.0
 MAX_CLIENTS = 64
-_MAGIC = b"DW1"
+_MAGIC = b"DW2"
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 _SDK_STATUSES = {"patched", "unsupported", "skipped"}
 _BASELINE_ACTIONS = {"status", "freeze", "reset"}
@@ -43,7 +49,11 @@ class ProtocolError(ValueError):
 
 
 class AuthFailed(Exception):
-    """The agent refused our key."""
+    """The agent refused our key, or the server could not prove it holds the key."""
+
+
+class UnsafeEndpoint(Exception):
+    """The agent's socket directory is not private to this user."""
 
 
 # -- addresses and key ---------------------------------------------------------------------------
@@ -60,7 +70,26 @@ def address_for(home: Path | str | None = None) -> str:
     digest = _home_hash(home)
     if sys.platform == "win32":
         return rf"\\.\pipe\driftwatch-{digest}"
-    return str(Path(tempfile.gettempdir()) / f"driftwatch-{os.getuid()}" / f"{digest}.sock")
+    return str(_socket_dir() / f"{digest}.sock")
+
+
+def _socket_dir() -> Path:
+    """POSIX only: the per-user runtime directory when there is one, else a private directory under the temp dir."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime and os.path.isabs(runtime) and os.path.isdir(runtime):
+        return Path(runtime) / "driftwatch"
+    return Path(tempfile.gettempdir()) / f"driftwatch-{os.getuid()}"
+
+
+def _socket_dir_is_safe(directory: Path) -> bool:
+    """Owned by this user, a real directory (not a symlink), and not writable by group or others."""
+    if os.name != "posix":
+        return True
+    try:
+        st = os.lstat(directory)
+    except FileNotFoundError:
+        return True  # nothing there yet: the connect will simply fail
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and (st.st_mode & 0o022) == 0
 
 
 def _read_key(path: Path) -> bytes:
@@ -177,8 +206,12 @@ def parse_message(raw: bytes) -> dict[str, Any]:
     return out
 
 
-def _mac(key: bytes, nonce: bytes) -> bytes:
-    return hmac.new(key, nonce, hashlib.sha256).digest()
+def _client_mac(key: bytes, server_nonce: bytes, client_nonce: bytes) -> bytes:
+    return hmac.new(key, b"client" + server_nonce + client_nonce, hashlib.sha256).digest()
+
+
+def _server_mac(key: bytes, server_nonce: bytes, client_nonce: bytes) -> bytes:
+    return hmac.new(key, b"server" + server_nonce + client_nonce, hashlib.sha256).digest()
 
 
 # -- server --------------------------------------------------------------------------------------
@@ -209,9 +242,9 @@ class IpcServer:
     def start(self) -> None:
         if os.name == "posix":
             sock_dir = Path(self._address).parent
-            sock_dir.mkdir(mode=0o700, exist_ok=True)
-            if sock_dir.stat().st_uid != os.getuid():
-                raise PermissionError("the agent socket directory belongs to someone else")
+            sock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if not _socket_dir_is_safe(sock_dir):
+                raise PermissionError("the agent socket directory is not private to this user")
             os.chmod(sock_dir, 0o700)
             try:
                 os.unlink(self._address)  # a stale socket from a crashed agent (we hold the agent lock)
@@ -245,14 +278,20 @@ class IpcServer:
             thread.start()
 
     def _handshake(self, conn: Any) -> bool:
-        nonce = os.urandom(32)
-        conn.send_bytes(_MAGIC + nonce)
+        server_nonce = os.urandom(32)
+        conn.send_bytes(_MAGIC + server_nonce)
         if not conn.poll(self._handshake_timeout):
             return False
-        reply = conn.recv_bytes(maxlength=64)
-        ok = hmac.compare_digest(reply, _mac(self._key, nonce))
-        conn.send_bytes(b"OK" if ok else b"NO")
-        return ok
+        reply = conn.recv_bytes(maxlength=128)  # client nonce (32) + client MAC (32)
+        if len(reply) != 64:
+            conn.send_bytes(b"NO")
+            return False
+        client_nonce, mac = reply[:32], reply[32:]
+        if not hmac.compare_digest(mac, _client_mac(self._key, server_nonce, client_nonce)):
+            conn.send_bytes(b"NO")
+            return False
+        conn.send_bytes(b"OK" + _server_mac(self._key, server_nonce, client_nonce))  # now prove ourselves too
+        return True
 
     def _serve(self, conn: Any) -> None:
         try:
@@ -320,7 +359,8 @@ class IpcServer:
 class IpcClient:
     """Sends one JSON message and returns the JSON reply, or None if the agent cannot be reached.
 
-    `last_error` says why: "unavailable" (no agent), "auth" (key refused), "timeout", "too_large", "error".
+    `last_error` says why: "unavailable" (no agent), "auth" (key refused, or the server could not prove it holds
+    the key), "unsafe" (socket directory not private), "timeout", "too_large", "error".
     """
 
     def __init__(self, home: Path | str | None = None, io_timeout: float = 1.0) -> None:
@@ -333,17 +373,26 @@ class IpcClient:
     def _connect(self) -> Any:
         if self._authkey is None:
             self._authkey = load_or_create_authkey(self._home)
-        conn = Client(address_for(self._home), family=FAMILY)
+        address = address_for(self._home)
+        if FAMILY == "AF_UNIX" and not _socket_dir_is_safe(Path(address).parent):
+            raise UnsafeEndpoint
+        conn = Client(address, family=FAMILY)
         try:
             if not conn.poll(self._io_timeout):
                 raise TimeoutError
             challenge = conn.recv_bytes(maxlength=64)
-            if not challenge.startswith(_MAGIC):
-                raise OSError("not a DriftWatch agent")
-            conn.send_bytes(_mac(self._authkey, challenge[len(_MAGIC):]))
+            if not challenge.startswith(_MAGIC) or len(challenge) != len(_MAGIC) + 32:
+                raise AuthFailed
+            server_nonce = challenge[len(_MAGIC):]
+            client_nonce = os.urandom(32)
+            conn.send_bytes(client_nonce + _client_mac(self._authkey, server_nonce, client_nonce))
             if not conn.poll(self._io_timeout):
                 raise TimeoutError
-            if conn.recv_bytes(maxlength=8) != b"OK":
+            reply = conn.recv_bytes(maxlength=64)
+            # Nothing but the handshake has been sent so far. Only a server that knows the key can pass this.
+            if len(reply) != 34 or reply[:2] != b"OK" or not hmac.compare_digest(
+                reply[2:], _server_mac(self._authkey, server_nonce, client_nonce)
+            ):
                 raise AuthFailed
         except BaseException:
             conn.close()
@@ -374,6 +423,8 @@ class IpcClient:
             return reply  # type: ignore[no-any-return]
         except AuthFailed:
             self.last_error = "auth"
+        except UnsafeEndpoint:
+            self.last_error = "unsafe"
         except (FileNotFoundError, ConnectionRefusedError):
             self.last_error = "unavailable"
         except TimeoutError:

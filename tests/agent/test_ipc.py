@@ -37,13 +37,23 @@ def server(home):
     srv.stop()
 
 
+def client_mac(key, snonce, cnonce):
+    return hmac.new(key, b"client" + snonce + cnonce, hashlib.sha256).digest()
+
+
+def server_mac(key, snonce, cnonce):
+    return hmac.new(key, b"server" + snonce + cnonce, hashlib.sha256).digest()
+
+
 def raw_connect(home):
     """A client that does the handshake by hand, so tests can send arbitrary bytes afterwards."""
     key = ipc.load_or_create_authkey(home)
     conn = Client(ipc.address_for(home), family=ipc.FAMILY)
-    nonce = conn.recv_bytes(maxlength=64)[3:]
-    conn.send_bytes(hmac.new(key, nonce, hashlib.sha256).digest())
-    assert conn.recv_bytes(maxlength=8) == b"OK"
+    snonce = conn.recv_bytes(maxlength=64)[3:]
+    cnonce = os.urandom(32)
+    conn.send_bytes(cnonce + client_mac(key, snonce, cnonce))
+    reply = conn.recv_bytes(maxlength=64)
+    assert reply == b"OK" + server_mac(key, snonce, cnonce)
     return conn
 
 
@@ -129,9 +139,10 @@ def test_a_pickle_payload_executes_nothing(server, home, tmp_path):
 def test_a_wrong_key_is_rejected_and_the_server_keeps_serving(server, home):
     srv, seen = server
     conn = Client(ipc.address_for(home), family=ipc.FAMILY)
-    nonce = conn.recv_bytes(maxlength=64)[3:]
-    conn.send_bytes(hmac.new(b"wrong key", nonce, hashlib.sha256).digest())
-    assert conn.recv_bytes(maxlength=8) == b"NO"
+    snonce = conn.recv_bytes(maxlength=64)[3:]
+    cnonce = os.urandom(32)
+    conn.send_bytes(cnonce + client_mac(b"wrong key", snonce, cnonce))
+    assert conn.recv_bytes(maxlength=64) == b"NO"
     with pytest.raises((EOFError, OSError)):
         conn.send_bytes(b'{"type": "status"}')
         conn.poll(2)
@@ -224,3 +235,98 @@ def test_the_agent_code_never_uses_the_pickle_paths_of_multiprocessing_connectio
         if re.search(r"^\s*(import|from)\s+pickle\b", text, re.M):
             offenders.append(f"{path.name}: pickle")
     assert offenders == []
+
+
+# ---- the server must prove it knows the key (endpoint squatting) -------------------------------------------
+class RogueAgent:
+    """Sits on the agent's address without the key and records anything the client sends after the handshake."""
+
+    def __init__(self, home, behaviour):
+        from multiprocessing.connection import Listener
+
+        self.behaviour = behaviour
+        self.received = []
+        self.handshake_done = threading.Event()
+        self.listener = Listener(ipc.address_for(home), family=ipc.FAMILY)
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        try:
+            conn = self.listener.accept()
+            snonce = os.urandom(32)
+            conn.send_bytes(b"DW2" + snonce)
+            if not conn.poll(3):
+                return
+            reply = conn.recv_bytes(maxlength=128)
+            if self.behaviour == "just-ok":
+                conn.send_bytes(b"OK")  # what the old, one-way handshake would have accepted
+            elif self.behaviour == "random-mac":
+                conn.send_bytes(b"OK" + os.urandom(32))
+            elif self.behaviour == "reflect":
+                conn.send_bytes(b"OK" + reply[32:])  # replay the client's own MAC back at it
+            self.handshake_done.set()
+            while conn.poll(1.0):
+                self.received.append(conn.recv_bytes(maxlength=ipc.MAX_MESSAGE))
+        except Exception:
+            self.handshake_done.set()
+
+    def close(self):
+        try:
+            self.listener.close()
+        except Exception:
+            pass
+
+
+@pytest.mark.parametrize("behaviour", ["just-ok", "random-mac", "reflect"])
+def test_a_listener_that_does_not_know_the_key_never_receives_any_message(home, behaviour):
+    ipc.load_or_create_authkey(home)  # the victim's key exists; the squatter cannot read it
+    rogue = RogueAgent(home, behaviour)
+    try:
+        client = ipc.IpcClient(home, io_timeout=1.0)
+        reply = client.send({"type": "capture", "project_id": PID, "provider": "openai", "model": "m", "text": "SECRET RESPONSE TEXT"})
+        assert reply is None and client.last_error == "auth"
+        assert rogue.handshake_done.wait(5)
+        time.sleep(0.3)
+        assert rogue.received == []  # the response text was never sent
+    finally:
+        rogue.close()
+
+
+def test_the_client_never_sends_a_capture_to_an_unauthenticated_server_even_through_the_capture_client(home, monkeypatch):
+    from driftwatch_llm.agent import launcher
+    from driftwatch_llm.capture.client import CaptureClient
+
+    monkeypatch.setattr(launcher, "ensure_agent", lambda *a, **k: False)
+    ipc.load_or_create_authkey(home)
+    rogue = RogueAgent(home, "just-ok")
+    client = CaptureClient(PID, home=home, heartbeat_every=0.1)
+    client.start()
+    try:
+        client.submit({"provider": "openai", "model": "m", "text": "SECRET RESPONSE TEXT", "latency_ms": 1.0})
+        time.sleep(2.0)
+        assert rogue.received == []
+        assert client.stats()["sent"] == 0
+    finally:
+        client.stop()
+        rogue.close()
+
+
+@pytest.mark.skipif(not POSIX, reason="POSIX socket directory ownership")
+def test_the_client_refuses_a_socket_directory_that_others_can_write_to(home, tmp_path, monkeypatch):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    os.chmod(shared, 0o777)
+    monkeypatch.setattr(ipc, "address_for", lambda h=None: str(shared / "x.sock"))
+    client = ipc.IpcClient(home)
+    assert client.send({"type": "status"}) is None and client.last_error == "unsafe"
+
+
+@pytest.mark.skipif(not POSIX, reason="POSIX socket directory location")
+def test_the_socket_prefers_the_per_user_runtime_directory(tmp_path, monkeypatch):
+    runtime = tmp_path / "run"
+    runtime.mkdir()
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+    assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    assert "/driftwatch-" in ipc.address_for(tmp_path / "h")
