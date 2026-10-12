@@ -1,3 +1,8 @@
 -r requirements.txt
 pytest
 pytest-asyncio
+typer
+keyring
+platformdirs
+hatchling
+build

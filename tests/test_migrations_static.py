@@ -176,3 +176,90 @@ def test_0008_limit_counts_all_created_orgs_and_project_updates_restricted():
 
 def test_0008_hard_denies_anon_on_projects():
     assert "revoke all on public.projects from anon;" in _sql("0008_console_functions.sql")
+
+
+# ---- 0009: device-code login for the CLI -------------------------------------
+
+ANON_0009 = {"public.start_device_login", "public.poll_device_login", "public.revoke_api_key_by_secret"}
+AUTHED_0009 = {"public.inspect_device_login", "public.approve_device_login", "public.deny_device_login"}
+
+
+def _fn_body(sql: str, header: str) -> str:
+    m = re.search(rf"create function {re.escape(header)}.*?\n\$\$;", sql, re.S)
+    assert m, header
+    return m.group(0)
+
+
+def test_0009_device_tables_are_private_with_rls():
+    sql = _sql("0009_device_auth.sql")
+    for t in ("device_codes", "device_attempts", "device_start_rate"):
+        assert f"create table private.{t}" in sql
+        assert f"alter table private.{t} enable row level security" in sql
+    assert "create table public." not in sql
+
+
+def test_0009_device_code_is_stored_hashed_only():
+    sql = _sql("0009_device_auth.sql")
+    assert "device_code_hash bytea not null unique" in sql
+    assert not re.search(r"\bdevice_code\s+text\b", sql)
+
+
+def test_0009_anon_grants_are_exactly_the_three_device_functions():
+    sql = _sql("0009_device_auth.sql")
+    anon = set(re.findall(r"grant execute on function ([\w.]+)\([^)]*\) to [^;]*\banon\b", sql))
+    assert anon == ANON_0009
+
+
+def test_0009_approval_functions_are_authenticated_only():
+    sql = _sql("0009_device_auth.sql")
+    for fn in AUTHED_0009:
+        assert re.search(rf"revoke all on function {re.escape(fn)}\([^)]*\) from public, anon;", sql), fn
+        assert re.search(rf"grant execute on function {re.escape(fn)}\([^)]*\) to authenticated;", sql), fn
+
+
+def test_0009_definer_functions_pin_empty_search_path():
+    sql = _sql("0009_device_auth.sql")
+    fns = re.findall(r"create function [\w.]+\(.*?\n\$\$;", sql, flags=re.S)
+    assert len(fns) >= 9
+    for fn in fns:
+        assert "set search_path = ''" in fn, fn[:70]
+
+
+def test_0009_wrong_codes_are_counted_without_raising():
+    body = _fn_body(_sql("0009_device_auth.sql"), "private.find_device_code")
+    at = body.index("insert into private.device_attempts")
+    tail = body[at:body.index("return", at)]
+    assert "raise exception" not in tail  # a raise would roll the counter back
+
+
+def test_0009_user_code_alphabet_and_rejection_sampling():
+    sql = _sql("0009_device_auth.sql")
+    assert "'BCDFGHJKLMNPQRSTVWXZ'" in sql
+    assert "< 240" in sql  # 240 = 12 * 20: every letter equally likely
+
+
+def test_0009_poll_rechecks_approver_role_and_consumes_once():
+    body = _fn_body(_sql("0009_device_auth.sql"), "public.poll_device_login")
+    assert "m.role in ('owner', 'admin')" in body
+    assert body.count("consumed_at = now()") >= 3
+    for status in ("expired_token", "slow_down", "authorization_pending", "access_denied", "key_limit"):
+        assert f"'{status}'" in body
+
+
+def test_0009_audit_results_fit_the_check_constraint():
+    sql = _sql("0009_device_auth.sql")
+    calls = re.findall(r"write_audit\((.*?)\);", sql, re.S)
+    assert calls
+    for call in calls:
+        assert re.search(r"'(ok|denied|error)'\s*$", call.strip()), call
+
+
+def test_0009_prune_job_and_rollback():
+    sql = _sql("0009_device_auth.sql")
+    assert "cron.schedule('driftwatch-device-prune'" in sql
+    down = (MIGRATIONS[0].parent.parent / "rollback" / "0009_down.sql").read_text(encoding="utf-8")
+    assert "cron.unschedule('driftwatch-device-prune')" in down
+    for fn in ANON_0009 | AUTHED_0009:
+        assert f"drop function if exists {fn}(" in down
+    for t in ("device_codes", "device_attempts", "device_start_rate"):
+        assert f"drop table if exists private.{t}" in down

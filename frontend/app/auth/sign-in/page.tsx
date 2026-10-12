@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient, isCloudAuthConfigured } from "../../../lib/supabase";
 import { Turnstile } from "@/components/Turnstile";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -12,6 +13,14 @@ export default function SignInPage() {
   const [message, setMessage] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | undefined>();
   const [captchaReset, setCaptchaReset] = useState(0);
+  const [signUpHref, setSignUpHref] = useState("/auth/sign-up");
+
+  // Carry a safe `next` (such as the CLI approval page) over to sign-up. Set after mount so the
+  // server render and the first client render agree.
+  useEffect(() => {
+    const safe = safeNextPath(new URLSearchParams(window.location.search).get("next"), "");
+    if (safe) setSignUpHref(`/auth/sign-up?next=${encodeURIComponent(safe)}`);
+  }, []);
 
   if (!isCloudAuthConfigured()) {
     return (
@@ -44,7 +53,8 @@ export default function SignInPage() {
       return;
     }
     setStatus("success");
-    window.location.href = "/dashboard";
+    // Same-site relative paths only (open-redirect safe); defaults to /dashboard.
+    window.location.href = safeNextPath(new URLSearchParams(window.location.search).get("next"));
   }
 
   return (
@@ -78,7 +88,7 @@ export default function SignInPage() {
         {status === "error" && <p className="text-sm text-red-400">{message}</p>}
       </form>
       <p className="mt-4 text-sm text-neutral-400">
-        No account? <Link href="/auth/sign-up" className="underline">Sign up</Link>
+        No account? <Link href={signUpHref} className="underline">Sign up</Link>
       </p>
     </main>
   );

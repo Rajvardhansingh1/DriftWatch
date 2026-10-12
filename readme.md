@@ -86,3 +86,7 @@ Runs at $0 at demo traffic levels with per-session rate limiting and canary resu
 ## Relationship to Project 1 (SentinelAI)
 
 Project 1 protects a single request synchronously, in the moment. DriftWatch watches system health statistically, across thousands of requests, over time. They share one component: the Hallucination Score module.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

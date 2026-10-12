@@ -94,7 +94,7 @@ test("actions.ts is a server-actions module and never logs", async () => {
 test("every server action checks the session before calling its core", async () => {
   const { readFileSync } = await import("node:fs");
   const chunks = readFileSync("app/dashboard/actions.ts", "utf8").split("export async function").slice(1);
-  assert.equal(chunks.length, 4);
+  assert.equal(chunks.length, 7); // 4 console actions + 3 device-login actions
   for (const c of chunks) {
     assert.ok(c.includes("await authed()"), c.slice(0, 40));
     assert.ok(c.includes("if (!a) return SIGN_IN"), c.slice(0, 40));

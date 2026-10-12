@@ -57,3 +57,9 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The action auto-detects `gitleaks.toml` (no dot), not `.gitleaks.toml`: name the file.
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Same version as the local check; the allowlist syntax needs 8.25 or newer.
+          GITLEAKS_VERSION: "8.30.1"
+          # The job is read-only, so posting PR comments only adds errors. Findings still fail the job.
+          GITLEAKS_ENABLE_COMMENTS: "false"

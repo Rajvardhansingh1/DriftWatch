@@ -1,0 +1,13 @@
+select cron.unschedule('driftwatch-device-prune');
+drop function if exists private.prune_device_codes();
+drop function if exists public.revoke_api_key_by_secret(text);
+drop function if exists public.deny_device_login(text);
+drop function if exists public.approve_device_login(text, uuid);
+drop function if exists public.inspect_device_login(text);
+drop function if exists private.find_device_code(text);
+drop function if exists public.poll_device_login(text);
+drop function if exists public.start_device_login(text, text);
+drop function if exists private.new_user_code();
+drop table if exists private.device_start_rate;
+drop table if exists private.device_attempts;
+drop table if exists private.device_codes;

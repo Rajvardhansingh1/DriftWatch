@@ -47,6 +47,8 @@ function seed() {
     logouts: 0,
     projects: [{ id: DEMO_PROJECT_ID, organization_id: ORG_ID, name: "Demo app", settings: {}, created_at: new Date(now - 86_400_000).toISOString() }],
     project_api_keys: [],
+    device_codes: [], // device-login requests (mirrors private.device_codes in 0009)
+    device_wrong_codes: 0, // wrong-code attempts by the one fake user (lockout at 5)
     signal_records,
     signal_hourly,
   };
@@ -142,6 +144,54 @@ function rpc(name, args) {
     case "delete_my_account":
       state.deleted = true;
       return [204, undefined];
+    // ---- device login (0009). Statuses mirror the SQL. A minted key is NOT added to project_api_keys,
+    // so the console checks that count keys are unaffected.
+    case "start_device_login": {
+      const nm = String(args.p_device_name ?? "").trim();
+      const os = String(args.p_device_os ?? "").trim();
+      if (!nm || nm.length > 64 || !os || os.length > 64) return [422, { code: "PT422", message: "invalid device name", details: null, hint: null }];
+      const alphabet = "BCDFGHJKLMNPQRSTVWXZ";
+      let user_code = "";
+      while (user_code.length < 8) user_code += alphabet[randomBytes(1)[0] % 20];
+      const row = { device_code: hex(32), user_code, device_name: nm, device_os: os, created_at: new Date().toISOString(),
+        last_polled_at: 0, approved_project_id: null, denied: false, consumed: false };
+      state.device_codes.push(row);
+      return [200, { device_code: row.device_code, user_code, expires_in: 600, interval: 5 }];
+    }
+    case "poll_device_login": {
+      const row = state.device_codes.find((d) => d.device_code === args.p_device_code);
+      if (!row || row.consumed) return [200, { status: "expired_token" }];
+      if (row.denied) return [200, { status: "access_denied" }];
+      if (!row.approved_project_id) {
+        const fast = Date.now() - row.last_polled_at < 4000;
+        row.last_polled_at = Date.now();
+        return [200, { status: fast ? "slow_down" : "authorization_pending" }];
+      }
+      row.consumed = true;
+      const project = state.projects.find((p) => p.id === row.approved_project_id);
+      return [200, { status: "approved", api_key: `dw_${hex(5)}_${hex(32)}`, project_id: project.id, project_name: project.name }];
+    }
+    case "inspect_device_login":
+    case "approve_device_login":
+    case "deny_device_login": {
+      if (state.device_wrong_codes >= 5) return [429, { code: "PT429", message: "too many wrong codes, wait 15 minutes", details: null, hint: null }];
+      const code = String(args.p_user_code ?? "").toUpperCase().replace(/[\s-]/g, "");
+      const row = state.device_codes.find((d) => d.user_code === code && !d.approved_project_id && !d.denied && !d.consumed);
+      if (!row) {
+        state.device_wrong_codes++;
+        return [200, { status: "invalid" }];
+      }
+      if (name === "inspect_device_login") {
+        return [200, { status: "pending", device_name: row.device_name, device_os: row.device_os, requested_at: row.created_at, expires_at: row.created_at }];
+      }
+      if (name === "deny_device_login") {
+        row.denied = true;
+        return [200, { status: "denied" }];
+      }
+      if (!state.projects.some((p) => p.id === args.p_project_id)) return [403, { code: "PT403", message: "forbidden", details: null, hint: null }];
+      row.approved_project_id = args.p_project_id;
+      return [200, { status: "approved" }];
+    }
     default:
       return [404, { code: "PGRST202", message: `Could not find the function public.${name}`, details: null, hint: null }];
   }
@@ -180,8 +230,10 @@ async function handle(req, res) {
 
   const rest = path.match(/^\/rest\/v1\/(rpc\/)?([a-z_]+)$/);
   if (rest) {
-    if (!authed(req)) return send(req, res, 401, { code: "PGRST301", message: "JWT invalid", details: null, hint: null });
     const [, isRpc, name] = rest;
+    // The CLI has no session: these two are callable with the anon key only (as in 0009).
+    const anonRpc = isRpc && ["start_device_login", "poll_device_login"].includes(name);
+    if (!anonRpc && !authed(req)) return send(req, res, 401, { code: "PGRST301", message: "JWT invalid", details: null, hint: null });
     if (isRpc && req.method === "POST") {
       const [status, out] = rpc(name, body);
       return send(req, res, status, out);

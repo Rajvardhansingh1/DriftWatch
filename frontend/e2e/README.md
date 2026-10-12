@@ -7,7 +7,10 @@ against the real project. This folder holds a local stand-in:
   and PostgREST calls the console makes (`/auth/v1/user`, `/auth/v1/logout`, the refresh-token
   grant, `GET /rest/v1/{projects,signal_records,signal_hourly,project_api_keys}` with `eq`/`gte`
   filters, `order`, `limit` and single-object requests, and the RPCs `create_project`,
-  `create_project_api_key`, `revoke_project_api_key`, `export_my_data`, `delete_my_account`).
+  `create_project_api_key`, `revoke_project_api_key`, `export_my_data`, `delete_my_account`, and the CLI
+  device-login RPCs `start_device_login`, `poll_device_login` (both callable without a session),
+  `inspect_device_login`, `approve_device_login`, `deny_device_login`; a key minted by a poll is not
+  added to the key list).
   State is in memory and reset on every start. One user (`tester@example.com`, bearer
   `fake-token`) and one seeded project, "Demo app". Realtime is not implemented.
 - `run.mjs`: builds the app against the fake, starts `next start -p 3100` and the fake, sets the

@@ -239,6 +239,88 @@ try {
     return out.join(" ");
   });
 
+  // ---- CLI device login (Plan 3). The CLI side is played by plain fetch calls to the fake.
+  const rpcAnon = async (fn, body) => {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST", headers: { apikey: "dummy-anon-key", "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    return r.json();
+  };
+  const startCode = async (name) => {
+    const s = await rpcAnon("start_device_login", { p_device_name: name, p_device_os: "Linux 6.1" });
+    return { ...s, dashed: `${s.user_code.slice(0, 4)}-${s.user_code.slice(4)}` };
+  };
+
+  await check("l1. device approval: confirm gate, project choice, key delivered once", async () => {
+    const keysBefore = state.project_api_keys.length;
+    const d = await startCode("e2e-laptop");
+    assert((await rpcAnon("poll_device_login", { p_device_code: d.device_code })).status === "authorization_pending", "not pending");
+    await page.goto(`${WEB}/auth/device?code=${d.dashed.toLowerCase()}`);
+    await page.getByRole("heading", { name: "Approve a CLI sign-in" }).waitFor({ timeout: 5000 });
+    assert((await page.getByLabel("Code from your terminal").inputValue()) === d.dashed, "code not prefilled and normalised");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Is this you?").waitFor({ timeout: 10_000 });
+    await page.getByText("e2e-laptop").waitFor();
+    await page.getByText("If someone else gave you this code, choose Deny.").waitFor();
+    const approve = page.getByRole("button", { name: "Approve", exact: true });
+    assert(await approve.isDisabled(), "Approve enabled before the checkbox");
+    await page.getByLabel("Project").selectOption({ label: "Second" });
+    await page.getByLabel(/I started this sign-in myself/).check();
+    assert(await approve.isEnabled(), "Approve still disabled after the checkbox");
+    await page.screenshot({ path: join(SHOTS, "device-confirm.png"), fullPage: true });
+    await approve.click();
+    await page.getByText("Approved.").waitFor({ timeout: 10_000 });
+    const polled = await rpcAnon("poll_device_login", { p_device_code: d.device_code });
+    assert(polled.status === "approved", `poll after approve: ${polled.status}`);
+    assert(/^dw_[0-9a-f]{10}_[0-9a-f]{64}$/.test(polled.api_key), "bad key shape");
+    assert(polled.project_id === secondId, "key not for the chosen project");
+    assert((await rpcAnon("poll_device_login", { p_device_code: d.device_code })).status === "expired_token", "replay accepted");
+    assert(!(await page.content()).includes(polled.api_key), "key appeared in the approval page");
+    assert(state.project_api_keys.length === keysBefore, "console key list changed");
+    return "pending -> approved for 'Second' -> key once -> replay expired";
+  });
+
+  await check("l2. wrong codes are rejected, then locked out", async () => {
+    state.device_wrong_codes = 0;
+    await page.goto(`${WEB}/auth/device`);
+    const input = page.getByLabel("Code from your terminal");
+    for (let i = 0; i < 5; i++) {
+      await input.fill("BBBB-BBBB");
+      await page.getByRole("button", { name: "Continue" }).click();
+      await page.getByText("That code is not valid or has expired.").waitFor({ timeout: 10_000 });
+    }
+    await input.fill("BBBB-BBBB");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText(/Too many wrong codes/).waitFor({ timeout: 10_000 });
+    await input.fill("hello");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("Enter the 8-letter code shown in your terminal.").waitFor({ timeout: 10_000 });
+    state.device_wrong_codes = 0;
+    return "5 invalid, then lockout, then bad format";
+  });
+
+  await check("l3. deny ends the request", async () => {
+    const d = await startCode("e2e-ci-box");
+    await page.goto(`${WEB}/auth/device?code=${d.dashed}`);
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByText("e2e-ci-box").waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Deny" }).click();
+    await page.getByText("Request denied.").waitFor({ timeout: 10_000 });
+    const polled = await rpcAnon("poll_device_login", { p_device_code: d.device_code });
+    assert(polled.status === "access_denied", `poll after deny: ${polled.status}`);
+    return "denied -> access_denied";
+  });
+
+  await check("l4. signed out, the device page goes to sign-in and keeps the code", async () => {
+    await context.clearCookies();
+    await page.goto(`${WEB}/auth/device?code=BCDF-GHJK`);
+    const u = new URL(page.url());
+    await context.addCookies([COOKIE]);
+    assert(u.pathname === "/auth/sign-in", `landed on ${u.pathname}`);
+    assert(u.searchParams.get("next") === "/auth/device?code=BCDF-GHJK", `next = ${u.searchParams.get("next")}`);
+    return `${u.pathname}${u.search}`;
+  });
+
   await check("h. without the session cookie /dashboard redirects to sign-in", async () => {
     await context.clearCookies();
     await page.goto(`${WEB}/dashboard`);
@@ -284,8 +366,8 @@ try {
     return "disabled -> wrong email error -> deleted, at /, then /dashboard -> sign-in";
   });
 
-  await check("k. screenshots saved (mobile project, desktop keys, desktop settings)", async () => {
-    const files = ["project-mobile-390x844.png", "keys-desktop.png", "settings-desktop.png"];
+  await check("k. screenshots saved (mobile project, desktop keys, desktop settings, device confirm)", async () => {
+    const files = ["project-mobile-390x844.png", "keys-desktop.png", "settings-desktop.png", "device-confirm.png"];
     const missing = files.filter((f) => !existsSync(join(SHOTS, f)));
     assert(missing.length === 0, `missing ${missing.join(", ")}`);
     return files.join(", ");

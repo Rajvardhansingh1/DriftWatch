@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { middleware } from "../middleware";
+import { safeNextPath } from "../lib/safe-redirect";
 
 test("protected route fails closed when cloud auth is not configured", async () => {
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -53,4 +54,29 @@ test("console CSP allows the Realtime websocket for https and plain-http (local)
       delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     }
   }
+});
+
+test("signed-out visit to the device approval page goes to sign-in and keeps the code", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-test";
+  try {
+    const res = await middleware(new NextRequest("http://localhost:3000/auth/device?code=BCDF-GHJK"));
+    assert.equal(res.status, 307);
+    const to = new URL(res.headers.get("location")!);
+    assert.equal(to.pathname, "/auth/sign-in");
+    assert.equal(to.searchParams.get("next"), "/auth/device?code=BCDF-GHJK");
+    assert.equal(safeNextPath(to.searchParams.get("next")), "/auth/device?code=BCDF-GHJK");
+  } finally {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  }
+});
+
+test("the device page fails closed without cloud auth, and sign-in itself stays public", async () => {
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const closed = await middleware(new NextRequest("http://localhost:3000/auth/device"));
+  assert.equal(closed.status, 307);
+  const open = await middleware(new NextRequest("http://localhost:3000/auth/sign-in"));
+  assert.equal(open.status, 200);
 });

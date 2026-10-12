@@ -15,3 +15,16 @@ test("e2e harness exists and is not imported by the app", () => {
     assert.doesNotMatch(readFileSync(f, "utf8"), /e2e\/|fake-supabase/, f);
   }
 });
+
+test("harness fake covers the device-login RPCs and run.mjs checks the approval flow", () => {
+  const fake = readFileSync(join("e2e", "fake-supabase.mjs"), "utf8");
+  for (const rpc of [
+    "start_device_login", "poll_device_login", "inspect_device_login", "approve_device_login", "deny_device_login",
+  ]) {
+    assert.ok(fake.includes(`"${rpc}"`), rpc);
+  }
+  // start/poll are the only RPCs callable without a session, as in 0009.
+  assert.match(fake, /\["start_device_login", "poll_device_login"\]\.includes\(name\)/);
+  const run = readFileSync(join("e2e", "run.mjs"), "utf8");
+  for (const id of ["l1.", "l2.", "l3.", "l4."]) assert.ok(run.includes(`"${id}`), id);
+});

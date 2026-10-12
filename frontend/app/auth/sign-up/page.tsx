@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient, isCloudAuthConfigured } from "../../../lib/supabase";
 import { Turnstile } from "@/components/Turnstile";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -34,7 +35,9 @@ export default function SignUpPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+          safeNextPath(new URLSearchParams(window.location.search).get("next")),
+        )}`,
         captchaToken,
       },
     });
