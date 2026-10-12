@@ -41,6 +41,7 @@ class CaptureClient:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._start_lock = threading.Lock()
         self._counts = {"dropped": 0, "sent": 0, "send_failures": 0}
 
     # -- called from the user's threads ---------------------------------------------------
@@ -58,10 +59,17 @@ class CaptureClient:
 
     # -- lifecycle ------------------------------------------------------------------------
     def start(self) -> None:
-        if self._thread is not None:
-            return
-        self._thread = threading.Thread(target=self._run, name="driftwatch-capture", daemon=True)
-        self._thread.start()
+        with self._start_lock:
+            if self._thread is not None:
+                return
+            self._thread = threading.Thread(target=self._run, name="driftwatch-capture", daemon=True)
+            self._thread.start()
+
+    def submit_and_start(self, record: dict[str, Any]) -> None:
+        """The sink used by the hook: the sender thread starts with the first captured response."""
+        if self._thread is None:
+            self.start()
+        self.submit(record)
 
     def stop(self) -> None:
         self._stop.set()
