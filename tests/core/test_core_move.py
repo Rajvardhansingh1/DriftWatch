@@ -71,3 +71,18 @@ def test_core_does_not_import_the_server_package():
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_the_server_imports_without_the_cli_and_agent_dependencies():
+    """Render installs requirements-lean.txt only: no typer, keyring, platformdirs, portalocker or httpx2."""
+    code = (
+        "import sys\n"
+        "for name in ('typer', 'keyring', 'platformdirs', 'portalocker', 'fastembed'):\n"
+        "    sys.modules[name] = None\n"
+        "import monitor.main\n"
+        "import monitor.cloud.ingest, monitor.scoring.combined_score, monitor.signals.embedding_drift\n"
+        "assert 'driftwatch_llm.cli' not in sys.modules and 'driftwatch_llm.agent' not in sys.modules\n"
+        "print('ok')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={**__import__("os").environ, "DRIFTWATCH_FORCE_SIMULATED": "true"})
+    assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stderr[-800:]
