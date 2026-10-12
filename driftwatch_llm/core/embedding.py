@@ -63,3 +63,37 @@ def rbf_mmd2(x: np.ndarray, y: np.ndarray, gamma: float | None = None) -> float:
 
 def embedding_drift_score(baseline_embeddings: np.ndarray, current_embeddings: np.ndarray) -> float:
     return max(0.0, rbf_mmd2(baseline_embeddings, current_embeddings))
+
+
+# ---- low-memory form used by the local agent ------------------------------------------------------
+# Same quantity as rbf_mmd2 above. The reference version builds an (n, n, d) difference array (about
+# 150 MB for a 200-sample baseline of 384-d vectors); this one uses |a-b|^2 = |a|^2 + |b|^2 - 2ab,
+# so only (n, n) matrices exist. tests/core/test_embedding_fast.py pins the two to 1e-6.
+
+
+def _sq_dists(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    d = (a * a).sum(axis=1)[:, None] + (b * b).sum(axis=1)[None, :] - 2.0 * (a @ b.T)
+    return np.maximum(d, 0.0)
+
+
+def _median_heuristic_gamma_fast(x: np.ndarray, y: np.ndarray) -> float:
+    pooled = np.vstack([np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)])
+    sq = _sq_dists(pooled, pooled)
+    i, j = np.triu_indices(len(pooled), k=1)
+    median_sq_dist = float(np.median(sq[i, j])) if len(i) else 0.0
+    return 1.0 / median_sq_dist if median_sq_dist > 0 else 1.0
+
+
+def rbf_mmd2_fast(x: np.ndarray, y: np.ndarray, gamma: float | None = None) -> float:
+    if gamma is None:
+        gamma = _median_heuristic_gamma_fast(x, y)
+    kxx = np.exp(-gamma * _sq_dists(x, x)).mean()
+    kyy = np.exp(-gamma * _sq_dists(y, y)).mean()
+    kxy = np.exp(-gamma * _sq_dists(x, y)).mean()
+    return float(kxx + kyy - 2 * kxy)
+
+
+def embedding_drift_score_fast(baseline_embeddings: np.ndarray, current_embeddings: np.ndarray) -> float:
+    return max(0.0, rbf_mmd2_fast(baseline_embeddings, current_embeddings))
