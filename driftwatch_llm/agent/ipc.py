@@ -203,6 +203,8 @@ class IpcServer:
         self._accept_thread: threading.Thread | None = None
         self._active = 0
         self._active_lock = threading.Lock()
+        self._conns: set[Any] = set()
+        self._serve_threads: set[threading.Thread] = set()
 
     def start(self) -> None:
         if os.name == "posix":
@@ -237,7 +239,10 @@ class IpcServer:
                     conn.close()
                     continue
                 self._active += 1
-            threading.Thread(target=self._serve, args=(conn,), name="dw-ipc-client", daemon=True).start()
+                self._conns.add(conn)
+                thread = threading.Thread(target=self._serve, args=(conn,), name="dw-ipc-client", daemon=True)
+                self._serve_threads.add(thread)
+            thread.start()
 
     def _handshake(self, conn: Any) -> bool:
         nonce = os.urandom(32)
@@ -279,6 +284,8 @@ class IpcServer:
                 pass
             with self._active_lock:
                 self._active -= 1
+                self._conns.discard(conn)
+                self._serve_threads.discard(threading.current_thread())
 
     def stop(self) -> None:
         self._stop.set()
@@ -288,6 +295,15 @@ class IpcServer:
             pass
         if self._accept_thread is not None:
             self._accept_thread.join(timeout=2.0)
+        with self._active_lock:  # release every accepted connection (a Windows pipe name stays taken until then)
+            conns, threads = list(self._conns), list(self._serve_threads)
+        for conn in conns:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        for thread in threads:
+            thread.join(timeout=2.0)
         if self._listener is not None:
             try:
                 self._listener.close()
