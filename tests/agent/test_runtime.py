@@ -194,3 +194,24 @@ def test_the_default_embedder_is_onnx_and_can_be_switched_by_an_environment_vari
     monkeypatch.setenv("DRIFTWATCH_AGENT_EMBEDDER", "sentence-transformers")
     runtime._default_embedder()
     assert asked == ["onnx", "sentence-transformers"]
+
+
+def test_the_emission_interval_and_baseline_size_can_be_tuned_for_development(tmp_path):
+    rt = AgentRuntime(
+        home=tmp_path / "home", embedder_factory=None, api=Api(EP, transport=httpx.MockTransport(lambda r: httpx.Response(200, json="accepted"))),
+        secrets=FakeSecrets(), baseline_size=12, min_interval=2.5,
+    )
+    assert rt._engine._baseline_size == 12 and rt._engine._min_interval == 2.5
+    rt.shutdown()
+
+
+def test_agent_settings_come_from_the_environment_and_ignore_nonsense():
+    from driftwatch_llm.agent.__main__ import settings_from_env
+
+    assert settings_from_env({}) == {}
+    assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": "2", "DRIFTWATCH_AGENT_BASELINE_SIZE": "50", "DRIFTWATCH_AGENT_LINGER": "9"}) == {
+        "min_interval": 2.0, "baseline_size": 50, "linger": 9.0,
+    }
+    for bad in ("abc", "-1", "0", "nan", "inf", ""):
+        assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": bad, "DRIFTWATCH_AGENT_BASELINE_SIZE": bad}) == {}, bad
+    assert settings_from_env({"DRIFTWATCH_AGENT_BASELINE_SIZE": "5"}) == {}  # below the 30-response minimum

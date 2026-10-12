@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from driftwatch_llm import __version__, paths
 from driftwatch_llm.agent import ipc
-from driftwatch_llm.agent.engine import DEFAULT_BASELINE_SIZE, MIN_BASELINE, Engine
+from driftwatch_llm.agent.engine import DEFAULT_BASELINE_SIZE, MIN_BASELINE, MIN_INTERVAL_SECONDS, Engine
 from driftwatch_llm.agent.store import AgentStore
 from driftwatch_llm.agent.sync import SyncWorker
 from driftwatch_llm.api import Api
@@ -43,6 +43,7 @@ class AgentRuntime:
         clock: Callable[[], float] = time.time,
         baseline_size: int = DEFAULT_BASELINE_SIZE,
         min_baseline: int = MIN_BASELINE,
+        min_interval: float = MIN_INTERVAL_SECONDS,
         linger: float = 30.0,
         sync_interval: float = 10.0,
     ) -> None:
@@ -52,7 +53,9 @@ class AgentRuntime:
         self._sync_interval = sync_interval
         self._factory = embedder_factory
         self._store = AgentStore(ipc.agent_dir(self._home) / "agent.sqlite3", clock=clock)
-        self._engine = Engine(self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline)
+        self._engine = Engine(
+            self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval
+        )
         self._sync = SyncWorker(
             self._store,
             api if api is not None else Api(resolve(dev=os.environ.get("DRIFTWATCH_DEV") == "1")),
