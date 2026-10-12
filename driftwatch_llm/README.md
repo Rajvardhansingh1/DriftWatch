@@ -17,10 +17,12 @@ Without the `[agent]` extra the package is just the CLI (`init`, `login`, `logou
 One signal on real traffic: **embedding drift**, how far recent LLM responses have moved from a baseline made of
 your app's first 200 responses (`driftwatch baseline freeze` can end the baseline early, with at least 30).
 It reports the drift score and a combined score computed from the signals present. It does not raise alerts
-yet: the alert threshold was tuned for a five-signal mix, so it is not applied to a single signal. Streaming
-calls are not captured yet. It tells you that drift happened, not why.
+yet: the alert threshold was tuned for a five-signal mix, so it is not applied to a single signal. It tells you
+that drift happened, not why.
 
-Supported SDKs: OpenAI, Anthropic, Groq and Google GenAI (the Python packages), non-streaming calls.
+Supported SDKs: OpenAI, Anthropic, Groq and Google GenAI (the Python packages). Streaming responses are captured
+as you consume them, and recorded only if the stream ends normally (a stream you stop early, or one that errors,
+records nothing). Not covered: Anthropic's `client.messages.stream()` helper (use `create(stream=True)`).
 
 ## What leaves your machine
 

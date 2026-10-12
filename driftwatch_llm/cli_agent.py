@@ -140,7 +140,7 @@ def agent_status(ctx: typer.Context) -> None:
         if stats:
             typer.echo(
                 f"    captured {stats.get('captured', 0)}, dropped {stats.get('dropped', 0)}, "
-                f"skipped streaming {stats.get('skipped_streaming', 0)}, skipped other {stats.get('skipped_other', 0)}, "
+                f"skipped streaming {stats.get('skipped_streaming', 0)}, left early {stats.get('skipped_partial', 0)}, skipped other {stats.get('skipped_other', 0)}, "
                 f"errors {stats.get('errors', 0)}"
             )
     for pid, info in st["projects"].items():

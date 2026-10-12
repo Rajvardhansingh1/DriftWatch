@@ -5,7 +5,9 @@ Rules this module lives by:
 1. The user's call comes first. The wrapper calls the original method and returns its result, or lets its
    exception through untouched. Recording happens after, and every step of it is inside try/except.
 2. Only the response text, provider, model and latency are recorded. Prompts are never read.
-3. Streaming calls are skipped (counted, not touched). Unrecognised or empty responses are skipped and counted.
+3. A streaming call returns a transparent proxy of the stream. The text is gathered as the caller consumes it
+   (nothing is read ahead or buffered for them) and recorded once, only if the stream ends normally; a stream
+   left early or broken by an error records nothing. Unrecognised or empty responses are skipped and counted.
 4. Only SDK major versions that were checked against the real packages are patched; others are left alone and
    reported as `unsupported` (checked 2026-10-12: openai 1-3, anthropic 0-1, groq 0-1, google-genai 1-2,
    google-generativeai 0.x).
@@ -25,13 +27,13 @@ from typing import Any, Callable
 
 MAX_TEXT_CHARS = 8000
 
-Target = namedtuple("Target", "name dist module cls method provider extractor majors")
+Target = namedtuple("Target", "name dist module cls method provider extractor majors streaming", defaults=(False,))
 
 _OPENAI = ("openai", "openai", None, None, None, "openai", None, (1, 2, 3))
 
 
-def _t(base, module, cls, method, extractor):
-    return Target(base[0], base[1], module, cls, method, base[5], extractor, base[7])
+def _t(base, module, cls, method, extractor, streaming=False):
+    return Target(base[0], base[1], module, cls, method, base[5], extractor, base[7], streaming)
 
 
 _CHAT = "openai.resources.chat.completions"
@@ -53,13 +55,15 @@ TARGETS = [
     _t(_GROQ, "groq.resources.chat.completions", "AsyncCompletions", "create", "chat"),
     _t(_GENAI, "google.genai.models", "Models", "generate_content", "genai"),
     _t(_GENAI, "google.genai.models", "AsyncModels", "generate_content", "genai"),
+    _t(_GENAI, "google.genai.models", "Models", "generate_content_stream", "genai", streaming=True),
+    _t(_GENAI, "google.genai.models", "AsyncModels", "generate_content_stream", "genai", streaming=True),
     _t(_LEGACY, "google.generativeai.generative_models", "GenerativeModel", "generate_content", "genai"),
     _t(_LEGACY, "google.generativeai.generative_models", "GenerativeModel", "generate_content_async", "genai"),
 ]
 
 _sink: Callable[[dict[str, Any]], None] | None = None
 _suppressed: contextvars.ContextVar[bool] = contextvars.ContextVar("driftwatch_no_capture", default=False)
-_stats = {"captured": 0, "skipped_streaming": 0, "skipped_other": 0, "errors": 0}
+_stats = {"captured": 0, "skipped_streaming": 0, "skipped_partial": 0, "skipped_other": 0, "errors": 0}
 _sdk: dict[str, dict[str, str]] = {}
 _patched: list[tuple[Any, str, Any]] = []
 _finder: Any = None
@@ -123,11 +127,19 @@ def _model_label(target: Target, owner: Any, kwargs: dict[str, Any], result: Any
     return None
 
 
+def _deliver(record: dict[str, Any]) -> None:
+    sink = _sink
+    if sink is None:
+        return
+    try:
+        sink(record)
+        _stats["captured"] += 1
+    except Exception:  # noqa: BLE001 - nor may a full or broken queue
+        _stats["errors"] += 1
+
+
 def _record(target: Target, owner: Any, kwargs: dict[str, Any], result: Any, started: float) -> None:
     if _suppressed.get():
-        return
-    if kwargs.get("stream"):
-        _stats["skipped_streaming"] += 1
         return
     try:
         text = _EXTRACTORS[target.extractor](result)
@@ -143,21 +155,178 @@ def _record(target: Target, owner: Any, kwargs: dict[str, Any], result: Any, sta
     except Exception:  # noqa: BLE001 - an unfamiliar response shape must never reach the caller
         _stats["skipped_other"] += 1
         return
-    sink = _sink
-    if sink is None:
-        return
-    try:
-        sink(record)
-        _stats["captured"] += 1
-    except Exception:  # noqa: BLE001 - nor may a full or broken queue
-        _stats["errors"] += 1
+    _deliver(record)
+
+
+# -- streaming -----------------------------------------------------------------------------------
+def _chunk_text(extractor: str, item: Any) -> Any:
+    """The text carried by one stream item, or None. May raise on an unfamiliar shape (the caller ignores it)."""
+    if extractor == "chat":  # openai / groq chat chunks
+        choices = item.choices
+        return choices[0].delta.content if choices else None
+    if extractor == "responses":  # openai responses events
+        return item.delta if item.type == "response.output_text.delta" else None
+    if extractor == "anthropic":  # anthropic raw message stream events
+        return item.delta.text if item.type == "content_block_delta" and item.delta.type == "text_delta" else None
+    return item.text  # google: each chunk is a partial response
+
+
+def _is_stream(obj: Any) -> bool:
+    return not isinstance(obj, (str, bytes, dict, list, tuple)) and (hasattr(obj, "__iter__") or hasattr(obj, "__aiter__"))
+
+
+class _StreamProxy:
+    """Stands in for a stream object: everything is delegated, and the text is gathered on the way through."""
+
+    def __init__(self, inner: Any, target: Target, owner: Any, kwargs: dict[str, Any], started: float) -> None:
+        self._inner = inner
+        self._target = target
+        self._owner = owner
+        self._kwargs = kwargs
+        self._started = started
+        self._parts: list[str] = []
+        self._size = 0
+        self._model: str | None = None
+        self._it: Any = None
+        self._ait: Any = None
+        self._done = False
+        self._broken = False
+        self._partial_counted = False
+
+    @property
+    def __class__(self):  # type: ignore[override]
+        return self._inner.__class__  # the caller's isinstance(stream, SomeSDKStream) keeps working
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __repr__(self) -> str:
+        return f"<driftwatch stream proxy for {self._inner!r}>"
+
+    # -- gathering --------------------------------------------------------------------------
+    def _collect(self, item: Any) -> None:
+        try:
+            text = _chunk_text(self._target.extractor, item)
+            if isinstance(text, str) and text and self._size < MAX_TEXT_CHARS:
+                self._parts.append(text)
+                self._size += len(text)
+            model = getattr(item, "model", None)
+            if self._model is None and isinstance(model, str) and model:
+                self._model = model
+        except Exception:  # noqa: BLE001 - a chunk we do not understand is simply not collected
+            pass
+
+    def _finish(self) -> None:
+        if self._done or self._broken:
+            return
+        self._done = True
+        if _suppressed.get():
+            return
+        text = "".join(self._parts)
+        if not text.strip():
+            _stats["skipped_other"] += 1
+            return
+        model = self._model
+        if not model:
+            model = _model_label(self._target, self._owner, self._kwargs, None)
+        _deliver(
+            {
+                "provider": self._target.provider,
+                "model": model,
+                "text": text[:MAX_TEXT_CHARS],
+                "latency_ms": round((time.perf_counter() - self._started) * 1000.0, 3),
+            }
+        )
+
+    def _note_closed(self) -> None:
+        if not self._done and not self._broken and not self._partial_counted:
+            self._partial_counted = True
+            _stats["skipped_partial"] += 1  # left early: a partial response would distort the signal
+
+    # -- sync -------------------------------------------------------------------------------
+    def __iter__(self) -> "_StreamProxy":
+        return self
+
+    def __next__(self) -> Any:
+        if self._it is None:
+            self._it = iter(self._inner)
+        try:
+            item = next(self._it)
+        except StopIteration:
+            self._finish()
+            raise
+        except BaseException:
+            self._broken = True
+            raise
+        self._collect(item)
+        return item
+
+    def __enter__(self) -> Any:
+        entered = self._inner.__enter__()
+        return self if entered is self._inner else entered
+
+    def __exit__(self, *exc: Any) -> Any:
+        try:
+            return self._inner.__exit__(*exc)
+        finally:
+            self._note_closed()
+
+    def close(self) -> Any:
+        try:
+            return self._inner.close()
+        finally:
+            self._note_closed()
+
+    # -- async ------------------------------------------------------------------------------
+    def __aiter__(self) -> "_StreamProxy":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._ait is None:
+            self._ait = self._inner.__aiter__()
+        try:
+            item = await self._ait.__anext__()
+        except StopAsyncIteration:
+            self._finish()
+            raise
+        except BaseException:
+            self._broken = True
+            raise
+        self._collect(item)
+        return item
+
+    async def __aenter__(self) -> Any:
+        entered = await self._inner.__aenter__()
+        return self if entered is self._inner else entered
+
+    async def __aexit__(self, *exc: Any) -> Any:
+        try:
+            return await self._inner.__aexit__(*exc)
+        finally:
+            self._note_closed()
+
+
+def _handoff(target: Target, owner: Any, kwargs: dict[str, Any], result: Any, started: float) -> Any:
+    """What the caller gets back: the result itself, or a recording proxy when it is a stream."""
+    if _suppressed.get():
+        return result
+    if kwargs.get("stream") or target.streaming:
+        try:
+            if _is_stream(result):
+                return _StreamProxy(result, target, owner, kwargs, started)
+        except Exception:  # noqa: BLE001
+            _stats["errors"] += 1
+            return result
+        _stats["skipped_streaming"] += 1  # flagged as a stream but not something we can wrap: hand it back untouched
+        return result
+    _record(target, owner, kwargs, result, started)
+    return result
 
 
 # -- wrapping ------------------------------------------------------------------------------------
 async def _record_after(awaitable: Any, target: Target, owner: Any, kwargs: dict[str, Any], started: float) -> Any:
     result = await awaitable
-    _record(target, owner, kwargs, result, started)
-    return result
+    return _handoff(target, owner, kwargs, result, started)
 
 
 def _make_wrapper(original: Callable[..., Any], target: Target) -> Callable[..., Any]:
@@ -169,8 +338,7 @@ def _make_wrapper(original: Callable[..., Any], target: Target) -> Callable[...,
         async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             started = time.perf_counter()
             result = await original(self, *args, **kwargs)
-            _record(target, self, kwargs, result, started)
-            return result
+            return _handoff(target, self, kwargs, result, started)
 
     else:
 
@@ -180,8 +348,7 @@ def _make_wrapper(original: Callable[..., Any], target: Target) -> Callable[...,
             result = original(self, *args, **kwargs)
             if inspect.isawaitable(result):  # openai / anthropic: a plain function that returns a coroutine
                 return _record_after(result, target, self, kwargs, started)
-            _record(target, self, kwargs, result, started)
-            return result
+            return _handoff(target, self, kwargs, result, started)
 
     wrapper.__driftwatch_original__ = original  # type: ignore[attr-defined]
     return wrapper
