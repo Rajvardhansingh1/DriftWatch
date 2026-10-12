@@ -255,3 +255,13 @@ def test_uninstall_stops_the_agent_and_removes_its_files(env, monkeypatch):
     assert r.exit_code == 0, r.output
     assert {"type": "stop"} in env.agent.sent
     assert not (env.home / "agent").exists() and not (env.home / "notice.json").exists()
+
+
+def test_agent_status_explains_a_slow_first_model_load(env):
+    slow = dict(STATUS, embedder="loading", embedder_loading_seconds=185.0)
+    env.agent.replies["status"] = {"ok": True, "status": slow}
+    out = env.run("agent", "status").output
+    assert "loading" in out and "3m" in out and "90 MB" in out and "HF_HUB_OFFLINE" in out
+    quick = dict(STATUS, embedder="loading", embedder_loading_seconds=12.0)
+    env.agent.replies["status"] = {"ok": True, "status": quick}
+    assert "90 MB" not in env.run("agent", "status").output  # no scary hint during a normal short load

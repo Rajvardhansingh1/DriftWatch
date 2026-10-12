@@ -68,12 +68,14 @@ class AgentRuntime:
         self._clients_lock = threading.Lock()
         self._stop = threading.Event()
         self._embedder_state = "loading" if embedder_factory is not None else "skipped"
+        self._embedder_started: float | None = None
         self._threads: list[threading.Thread] = []
 
     # -- embedder -----------------------------------------------------------------------
     def load_embedder_now(self) -> None:
         if self._factory is None:
             return
+        self._embedder_started = self._clock()
         try:
             self._engine.set_embedder(self._factory())
             self._embedder_state = "ready"
@@ -139,6 +141,11 @@ class AgentRuntime:
             "pid": os.getpid(),
             "uptime_seconds": round(now - self._started, 1),
             "embedder": self._embedder_state,
+            "embedder_loading_seconds": (
+                round(now - self._embedder_started, 1)
+                if self._embedder_state == "loading" and self._embedder_started is not None
+                else None
+            ),
             "clients": clients,
             "projects": projects,
             "sync": self._sync.status(),

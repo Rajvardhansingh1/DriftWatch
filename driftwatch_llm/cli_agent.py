@@ -122,7 +122,13 @@ def agent_status(ctx: typer.Context) -> None:
     st = reply["status"]
     typer.echo(f"agent: running (pid {st['pid']}, up {_uptime(st['uptime_seconds'])}, v{st['agent_version']})")
     embedder = st["embedder"]
-    typer.echo(f"embedder: {embedder}")
+    waited = st.get("embedder_loading_seconds")
+    typer.echo(f"embedder: {embedder}" + (f" ({_uptime(waited)} so far)" if embedder == "loading" and waited else ""))
+    if embedder == "loading" and waited and waited >= 60:
+        typer.echo(
+            "  Still loading. The first run downloads about 90 MB from huggingface.co; on a slow connection that can take "
+            "minutes. Once the model is cached you can set HF_HUB_OFFLINE=1 to skip the network check."
+        )
     if embedder.startswith("failed"):
         typer.echo(EXTRA_HINT)
     clients = st["clients"]

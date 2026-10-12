@@ -215,3 +215,14 @@ def test_agent_settings_come_from_the_environment_and_ignore_nonsense():
     for bad in ("abc", "-1", "0", "nan", "inf", ""):
         assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": bad, "DRIFTWATCH_AGENT_BASELINE_SIZE": bad}) == {}, bad
     assert settings_from_env({"DRIFTWATCH_AGENT_BASELINE_SIZE": "5"}) == {}  # below the 30-response minimum
+
+
+def test_status_says_how_long_the_model_has_been_loading(tmp_path):
+    clock = Clock()
+    rt = make(tmp_path, clock)
+    assert rt.handle({"type": "status"})["status"]["embedder_loading_seconds"] is None  # not started yet
+    rt._embedder_started = clock.now - 90
+    st = rt.handle({"type": "status"})["status"]
+    assert st["embedder"] == "loading" and st["embedder_loading_seconds"] == 90.0
+    wait_loaded(rt)
+    assert rt.handle({"type": "status"})["status"]["embedder_loading_seconds"] is None
