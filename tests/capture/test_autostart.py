@@ -280,7 +280,7 @@ def test_end_to_end_a_call_in_a_hooked_app_reaches_a_real_agent(env, tmp_path):
     assert any(c["sdks"].get("openai", {}).get("status") == "patched" for c in status["clients"]), status["clients"]
     blob = json.dumps(status)
     assert "SECRET-PROMPT-1234" not in blob and "an answer from the fake sdk" not in blob
-    assert status["counters"]["dropped_no_embedder"] >= 1  # test-mode agent has no embedder: counted, not lost silently
+    assert status["counters"]["buffered_while_loading"] >= 1  # test-mode agent has no embedder: kept for later, counted
 
 
 def test_driftwatch_run_hooks_one_command_without_a_pth_and_chains_the_users_sitecustomize(env, tmp_path, monkeypatch):
