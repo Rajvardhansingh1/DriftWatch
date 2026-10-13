@@ -4,7 +4,7 @@ website from the numbers the agent already holds (no response text exists on dis
 How a browser gets in, and what keeps everyone else out:
 
 - `driftwatch dashboard` asks the agent (over its authenticated local endpoint) to start this server and gets a
-  one-time-per-run token. It opens `http://127.0.0.1:PORT/#token=...`. A URL fragment is never sent to a server,
+  one-time token (it works once, so a link glimpsed in a process list is useless afterwards). It opens `http://127.0.0.1:PORT/#token=...`. A URL fragment is never sent to a server,
   never put in a Referer header and not stored in server logs.
 - The page's script posts the token to `/session`; the server answers with a random session id in an
   `HttpOnly; SameSite=Strict` cookie, and the script removes the fragment from the address bar.
@@ -75,6 +75,7 @@ class DashboardServer:
         self._provider = provider
         self._static = Path(static_dir) if static_dir is not None else default_static_dir()
         self.token = secrets.token_urlsafe(32)
+        self._token_used = False
         self._sessions: dict[str, float] = {}
         self._lock = threading.Lock()
         self._allowed_hosts: set[str] = set()
@@ -122,6 +123,13 @@ class DashboardServer:
             self._httpd.shutdown()
             self._httpd.server_close()
             self._httpd = None
+
+    def issue_token(self) -> str:
+        """A fresh one-time token (the previous one stops working). Every `driftwatch dashboard` gets its own."""
+        with self._lock:
+            self.token = secrets.token_urlsafe(32)
+            self._token_used = False
+            return self.token
 
     # -- helpers ------------------------------------------------------------------------
     def _reply(self, h: BaseHTTPRequestHandler, status: int, body: bytes = b"", ctype: str = "application/json", extra: dict[str, str] | None = None) -> None:
@@ -239,10 +247,12 @@ class DashboardServer:
         except ValueError:
             return self._error(h, 400, "bad json")
         token = body.get("token") if isinstance(body, dict) else None
-        if not isinstance(token, str) or not hmac.compare_digest(token.encode("utf-8"), self.token.encode("utf-8")):
-            return self._error(h, 401, "wrong token")
         sid = secrets.token_urlsafe(32)
         with self._lock:
+            valid = isinstance(token, str) and hmac.compare_digest(token.encode("utf-8"), self.token.encode("utf-8"))
+            if not valid or self._token_used:
+                return self._error(h, 401, "wrong or already used token")
+            self._token_used = True  # the link may have been visible in a process list: it works once
             if len(self._sessions) >= MAX_SESSIONS:
                 self._sessions.pop(min(self._sessions, key=self._sessions.get))  # type: ignore[arg-type]
             self._sessions[sid] = time.time() + SESSION_TTL

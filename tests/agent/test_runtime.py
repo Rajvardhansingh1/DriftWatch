@@ -302,9 +302,9 @@ def test_the_dashboard_message_starts_the_server_once_and_it_reads_the_agents_nu
     first = rt.handle({"type": "dashboard"})
     again = rt.handle({"type": "dashboard"})
     try:
-        assert first["ok"] and first["port"] == again["port"] and first["token"] == again["token"]
+        assert first["ok"] and first["port"] == again["port"] and first["token"] != again["token"]  # one server, a fresh one-time link per call
         conn = http.client.HTTPConnection("127.0.0.1", first["port"], timeout=5)
-        conn.request("POST", "/session", json.dumps({"token": first["token"]}), {"Content-Type": "application/json"})
+        conn.request("POST", "/session", json.dumps({"token": again["token"]}), {"Content-Type": "application/json"})
         r = conn.getresponse(); r.read()
         cookie = r.getheader("Set-Cookie").split(";")[0]
         conn.request("GET", f"/api/series?project={P1}&range=24h", headers={"Cookie": cookie})

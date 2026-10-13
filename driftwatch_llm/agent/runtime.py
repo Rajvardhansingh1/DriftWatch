@@ -157,7 +157,7 @@ class AgentRuntime:
 
                 self._dashboard = DashboardServer(_DashboardView(self))
                 self._dashboard.start()
-            return self._dashboard.address[1], self._dashboard.token
+            return self._dashboard.address[1], self._dashboard.issue_token()
 
     def _touch_viewer(self) -> None:
         with self._clients_lock:

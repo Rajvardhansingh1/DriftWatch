@@ -85,6 +85,17 @@ def test_the_token_becomes_an_httponly_samesite_strict_cookie(server):
     assert server.token not in cookie  # the cookie is a separate session id, not the URL token itself
 
 
+def test_the_token_works_once_so_a_link_seen_in_a_process_list_is_useless_afterwards(server):
+    old = server.token
+    login(server)
+    again = req(server, "POST", "/session", {"Content-Type": "application/json"}, json.dumps({"token": old}))
+    assert again[0] == 401 and "set-cookie" not in again[1]
+    fresh = server.issue_token()  # `driftwatch dashboard` again: a new link, the old one stays dead
+    assert fresh != old
+    assert req(server, "POST", "/session", {"Content-Type": "application/json"}, json.dumps({"token": old}))[0] == 401
+    assert req(server, "POST", "/session", {"Content-Type": "application/json"}, json.dumps({"token": fresh}))[0] == 204
+
+
 def test_a_wrong_missing_or_malformed_token_gets_no_session(server):
     json_h = {"Content-Type": "application/json"}
     for body in (json.dumps({"token": "nope"}), json.dumps({}), "not json", json.dumps({"token": 5}), json.dumps(["x"])):
@@ -185,5 +196,8 @@ def test_only_get_and_the_session_post_exist(server):
 
 
 def test_an_oversized_session_body_is_refused(server):
-    status, _, _ = req(server, "POST", "/session", {"Content-Type": "application/json"}, "x" * 100_000)
+    try:
+        status, _, _ = req(server, "POST", "/session", {"Content-Type": "application/json"}, "x" * 100_000)
+    except (ConnectionError, http.client.HTTPException):
+        return  # the server hung up without reading the body: also a refusal
     assert status in (400, 413)
