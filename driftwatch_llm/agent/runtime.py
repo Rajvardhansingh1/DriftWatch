@@ -7,6 +7,7 @@ Lifetime: the agent exits `linger` seconds after the last heartbeat from any cli
 from __future__ import annotations
 
 import os
+from collections import deque
 import threading
 import time
 from pathlib import Path
@@ -23,6 +24,7 @@ from driftwatch_llm.secrets import SecretStore
 
 ALIVE_WINDOW = 15.0  # a client counts as connected for this long after its last message
 PRUNE_EVERY = 3600.0
+CAPTURE_QUEUE = 1000  # responses waiting to be scored; the oldest are dropped (and counted) beyond this
 
 
 def _default_embedder() -> Any:
@@ -50,6 +52,7 @@ class AgentRuntime:
         min_interval: float = MIN_INTERVAL_SECONDS,
         linger: float = 30.0,
         sync_interval: float = 10.0,
+        capture_queue: int = CAPTURE_QUEUE,
     ) -> None:
         self._home = Path(home) if home is not None else paths.config_dir()
         self._clock = clock
@@ -74,6 +77,11 @@ class AgentRuntime:
         self._embedder_state = "loading" if embedder_factory is not None else "skipped"
         self._embedder_started: float | None = None
         self._threads: list[threading.Thread] = []
+        # The IPC thread only queues; one worker embeds and scores, so a slow model never stalls a connection.
+        self._queue: deque[tuple[str, str, str, str | None]] = deque()
+        self._queue_max = capture_queue
+        self._queue_lock = threading.Lock()
+        self._work = threading.Event()
 
     # -- embedder -----------------------------------------------------------------------
     def load_embedder_now(self) -> None:
@@ -107,9 +115,13 @@ class AgentRuntime:
                     client["stats"] = msg["stats"]
             return {"ok": True}
         if kind == "capture":
-            events = self._engine.capture(msg["project_id"], msg["text"], msg["provider"], msg.get("model"))
-            self._store.bump("captured")
-            return {"ok": True, "emitted": len(events)}
+            with self._queue_lock:
+                if len(self._queue) >= self._queue_max:
+                    self._queue.popleft()
+                    self._store.bump("dropped_queue_full")
+                self._queue.append((msg["project_id"], msg["text"], msg["provider"], msg.get("model")))
+            self._work.set()
+            return {"ok": True}
         if kind == "baseline":
             project = msg["project_id"]
             if msg["action"] == "freeze":
@@ -153,8 +165,28 @@ class AgentRuntime:
             "clients": clients,
             "projects": projects,
             "sync": self._sync.status(),
+            "queued": len(self._queue),
             "counters": self._store.counters(),
         }
+
+    def drain(self) -> None:
+        """Process everything queued, in the calling thread. The worker calls this; tests call it directly."""
+        while True:
+            with self._queue_lock:
+                if not self._queue:
+                    return
+                project_id, text, provider, model = self._queue.popleft()
+            try:
+                self._engine.capture(project_id, text, provider, model)
+                self._store.bump("captured")
+            except Exception:  # noqa: BLE001 - one bad response must not stop the worker
+                self._store.bump("capture_errors")
+
+    def _worker(self) -> None:
+        while not self._stop.is_set():
+            self._work.wait(0.5)
+            self._work.clear()
+            self.drain()
 
     # -- lifetime -----------------------------------------------------------------------
     def tick(self) -> bool:
@@ -170,6 +202,7 @@ class AgentRuntime:
         if self._factory is not None and self._embedder_state == "loading":
             self._spawn(self.load_embedder_now, "dw-embedder")
         self._spawn(self._sync_loop, "dw-sync")
+        self._spawn(self._worker, "dw-worker")
 
     def _spawn(self, target: Callable[[], None], name: str) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)

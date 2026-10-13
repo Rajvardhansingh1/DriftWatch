@@ -21,7 +21,7 @@ from driftwatch_llm.capture import wrappers
 
 HEARTBEAT_EVERY = 5.0
 ENSURE_EVERY = 60.0
-QUEUE_SIZE = 200
+QUEUE_SIZE = 500  # about 4 MB of text at the very most; bursts ride this out while the agent starts
 
 
 class CaptureClient:

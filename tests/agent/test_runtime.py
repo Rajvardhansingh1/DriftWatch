@@ -64,7 +64,9 @@ def wait_loaded(rt):
 
 
 def capture(rt, text, project=P1, model="gpt-x"):
-    return rt.handle({"type": "capture", "project_id": project, "provider": "openai", "model": model, "text": text})
+    reply = rt.handle({"type": "capture", "project_id": project, "provider": "openai", "model": model, "text": text})
+    rt.drain()  # the worker thread is not running in these tests: process what was queued, here
+    return reply
 
 
 def test_hello_and_heartbeat_register_clients_and_status_lists_them(tmp_path):
@@ -215,3 +217,52 @@ def test_status_says_how_long_the_model_has_been_loading(tmp_path):
     assert st["embedder"] == "loading" and st["embedder_loading_seconds"] == 90.0
     wait_loaded(rt)
     assert rt.handle({"type": "status"})["status"]["embedder_loading_seconds"] is None
+
+
+def test_the_ipc_thread_only_queues_the_embedding_happens_on_the_worker(tmp_path):
+    import threading
+
+    seen = []
+
+    class Recording(ThemeEmbedder):
+        def encode(self, texts):
+            seen.append(threading.current_thread().name)
+            return super().encode(texts)
+
+    rt = make(tmp_path, factory=lambda: Recording())
+    wait_loaded(rt)
+    reply = rt.handle({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": "A: x"})
+    assert reply["ok"] is True and seen == []  # answered before any embedding happened
+    assert rt.handle({"type": "status"})["status"]["queued"] == 1
+    rt.drain()
+    assert seen == [threading.current_thread().name]
+    assert rt.handle({"type": "status"})["status"]["queued"] == 0
+
+
+def test_the_capture_queue_is_bounded_and_counts_what_it_drops(tmp_path):
+    rt = make(tmp_path, capture_queue=3)
+    for i in range(5):
+        rt.handle({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": f"A: {i}"})
+    assert rt.handle({"type": "status"})["status"]["counters"]["dropped_queue_full"] == 2
+    rt.drain()
+    assert rt.handle({"type": "status"})["status"]["queued"] == 0
+
+
+def test_a_burst_over_ipc_is_answered_fast_and_fully_processed(tmp_path):
+    rt = make(tmp_path)
+    wait_loaded(rt)
+    rt.start()
+    try:
+        client = ipc.IpcClient(tmp_path / "home")
+        t0 = time.time()
+        for i in range(150):
+            assert client.send({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": f"A: {i}"})["ok"]
+        assert time.time() - t0 < 5
+        deadline = time.time() + 10
+        while time.time() < deadline and rt.handle({"type": "status"})["status"]["queued"]:
+            time.sleep(0.05)
+        st = rt.handle({"type": "status"})["status"]
+        assert st["queued"] == 0 and st["projects"][P1]["baseline"]["frozen"] is True
+        client.close()
+    finally:
+        rt.shutdown()
