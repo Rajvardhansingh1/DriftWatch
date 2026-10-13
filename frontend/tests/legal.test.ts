@@ -39,7 +39,8 @@ test("privacy names the sign-in cookies accurately", () => {
 test("privacy does not call live features not live", () => {
   const src = read("privacy");
   assert.ok(!src.includes("These features are not live yet"));
-  assert.ok(src.includes("local agent is not available yet"));
+  assert.ok(src.includes("Prompts are never read"));
+  assert.ok(src.includes("keeps nothing"), "the relay promise is stated");
 });
 
 test("privacy discloses the key prefix and what remains in the security log", () => {

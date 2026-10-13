@@ -10,6 +10,7 @@ import re
 _PATTERNS = [
     (re.compile(r"Bearer\s+[A-Za-z0-9._\-]+", re.IGNORECASE), "Bearer [REDACTED]"),
     (re.compile(r"eyJ[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{5,}"), "[REDACTED_JWT]"),
+    (re.compile(r"dw_[0-9a-f]{10}_[0-9a-f]{64}"), "[REDACTED_PROJECT_KEY]"),
     (re.compile(r"gsk_[A-Za-z0-9]{10,}"), "[REDACTED_GROQ_KEY]"),
     (re.compile(r"AIza[0-9A-Za-z_\-]{20,}"), "[REDACTED_GOOGLE_KEY]"),
     (re.compile(r"sk-[A-Za-z0-9]{20,}"), "[REDACTED_KEY]"),

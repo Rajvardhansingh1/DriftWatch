@@ -37,3 +37,10 @@ def test_global_install_redacts_records_from_any_logger(caplog):
     with caplog.at_level(logging.INFO):
         logging.getLogger("some.library").info("auth header Bearer abc.def.ghi leaked")
     assert "abc.def.ghi" not in caplog.text
+
+
+def test_project_api_keys_are_redacted():
+    from monitor.logging_redaction import redact
+
+    key = "dw_" + "a1b2c3d4e5" + "_" + "0123456789abcdef" * 4
+    assert key not in redact(f"rejected {key} for project") and "[REDACTED_PROJECT_KEY]" in redact(key)

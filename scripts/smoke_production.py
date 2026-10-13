@@ -74,8 +74,28 @@ def monitor_checks(monitor: str) -> None:
         stranger = httpx.get(f"{monitor}/api/health", headers={"Origin": "https://evil.example"}, timeout=60)
         allowed = stranger.headers.get("access-control-allow-origin")
         check("the monitor does not allow a stranger's origin", allowed not in ("*", "https://evil.example"), str(allowed))
+        relay_checks(monitor)
     except httpx.HTTPError as exc:
         check("the monitor answers", False, type(exc).__name__)
+
+
+def relay_checks(monitor: str) -> None:
+    """The free allowance's relay, without a key and without spending anything."""
+    url = f"{monitor}/v1/judge"
+    bad = {"Authorization": "Bearer dw_" + "0" * 10 + "_" + "0" * 64}
+    body = {"text": "smoke test", "idempotency_key": "11111111-2222-4333-8444-555555555555"}
+    r = httpx.post(url, json=body, headers=bad, timeout=60)
+    # 401: the database refused the unknown key. 503 is also fine before the relay is configured or while it is off.
+    check("the relay refuses an unknown key", r.status_code in (401, 503), f"{r.status_code}")
+    r = httpx.post(url, json=body, timeout=60)
+    check("the relay refuses a request with no key", r.status_code in (401, 503), f"{r.status_code}")
+    r = httpx.post(url, json={**body, "model": "x", "prompt": "y"}, headers=bad, timeout=60)
+    check("the relay never accepts a caller-chosen model or prompt", r.status_code in (401, 422, 503), f"{r.status_code}")
+    check("GET is not allowed on the relay", httpx.get(url, timeout=60).status_code == 405)
+    r = httpx.request("OPTIONS", url, headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"}, timeout=60)
+    check("the relay allows no cross-origin browser calls", r.headers.get("access-control-allow-origin") not in ("*", "https://evil.example"))
+    r = httpx.post(url, content=b"x" * 20000, headers={**bad, "content-type": "application/json"}, timeout=60)
+    check("an oversized body is refused", r.status_code in (401, 413, 503), f"{r.status_code}")
 
 
 # -- the database API (Supabase) ------------------------------------------------------------------------

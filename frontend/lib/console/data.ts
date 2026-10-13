@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hourlyToSeries, MAX_POINTS, rowsToSeries, SIGNAL_NAMES } from "./series";
+import { parseQuota, type Quota } from "./quota";
 import { rangeToSince, type Range } from "./validate";
 import type { SignalSeries } from "@/lib/types";
 
@@ -60,4 +61,14 @@ export async function listKeys(client: SupabaseClient, projectId: string): Promi
     .order("created_at", { ascending: false });
   if (error) throw new Error("keys unavailable");
   return (data ?? []) as KeyRow[];
+}
+
+/** How much of the free allowance this user has used. Null when it cannot be read: the note is then not shown. */
+export async function loadQuota(client: SupabaseClient): Promise<Quota | null> {
+  try {
+    const { data, error } = await client.rpc("my_quota");
+    return error ? null : parseQuota(data);
+  } catch {
+    return null;
+  }
 }

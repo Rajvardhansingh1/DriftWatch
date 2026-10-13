@@ -15,6 +15,10 @@ ANON_EXECUTABLE_ALLOWLIST = {
     "public.start_device_login",
     "public.poll_device_login",
     "public.revoke_api_key_by_secret",
+    # Plan 6 (0010): the relay (Render) holds no service key, so it meters with the project key like the agent does.
+    # Each call authenticates the key first and fails identically for malformed, unknown and revoked keys.
+    "public.reserve_quota",
+    "public.settle_quota",
 }
 
 

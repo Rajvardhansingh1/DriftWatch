@@ -27,6 +27,16 @@ services:
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
+      # The free allowance's relay (POST /v1/judge). A SEPARATE Groq key from the demo's so the two never share a cap.
+      # Leave it unset and the route answers 503. DISABLE_FREE_PROXY=true is the kill switch.
+      - key: FREE_PROXY_GROQ_KEY
+        sync: false
+      - key: FREE_PROXY_RELAY_SECRET
+        sync: false
+      - key: FREE_PROXY_MODEL
+        value: qwen/qwen3.8-27b
+      - key: DISABLE_FREE_PROXY
+        value: "false"
       - key: DRIFTWATCH_FORCE_SIMULATED
         value: "false"
       - key: DRIFTWATCH_DB_PATH

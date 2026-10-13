@@ -78,3 +78,10 @@ def test_the_local_dashboard_matches_what_the_cloud_received(project):
     r = subprocess.run([sys.executable, str(KIT / "parity.py")], cwd=proj, env=env, capture_output=True, text=True, timeout=600)
     assert r.returncode == 0, f"parity failed:\n{r.stdout[-3000:]}\n{r.stderr[-1500:]}"
     assert "ALL GOOD" in r.stdout
+
+
+def test_the_judge_scenario_runs_clean(project):
+    proj, env = project
+    r = subprocess.run([sys.executable, str(KIT / "judge.py")], cwd=proj, env=env, capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, f"judge scenario failed:\n{r.stdout[-3500:]}\n{r.stderr[-1500:]}"
+    assert "ALL GOOD" in r.stdout

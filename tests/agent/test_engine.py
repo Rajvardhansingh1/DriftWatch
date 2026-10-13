@@ -243,3 +243,33 @@ def test_a_replay_can_complete_the_baseline_and_emit_values(store, clock):
     e.set_embedder(ThemeEmbedder())
     assert e.baseline_status(P1)["frozen"] is True
     assert store.load_baseline(P1).shape == (10, 8)
+
+
+def test_the_combined_score_uses_the_latest_judge_value_when_there_is_one(store, clock):
+    e = make(store, clock, extra_signals=lambda project_id: {"judge_trend": 0.2})
+    feed(e, clock, P1, "A", 10)
+    drift, combined = feed(e, clock, P1, "B", 5)
+    assert combined["meta"]["mode"] == "embedding_judge" and combined["meta"]["signals"] == ["embedding_drift", "judge_trend"]
+
+
+def test_a_better_judge_score_gives_a_lower_combined_score(tmp_path, clock):
+    from driftwatch_llm.agent.store import AgentStore
+
+    scores = {}
+    for name, judge in (("poor", 0.1), ("good", 0.95)):
+        st = AgentStore(tmp_path / name / "a.sqlite3", clock=clock)
+        eng = Engine(st, ThemeEmbedder(), clock=clock, baseline_size=10, min_baseline=4, extra_signals=lambda p, j=judge: {"judge_trend": j})
+        feed(eng, clock, P1, "A", 10)
+        scores[name] = feed(eng, clock, P1, "B", 5)[1]["value"]
+        st.close()
+    assert scores["poor"] > scores["good"]
+
+
+def test_emit_signal_stores_validates_and_queues_an_external_signal(store, clock):
+    e = make(store, clock)
+    ev = e.emit_signal(P1, "judge_trend", 0.75, {"mode": "judge_answer_only", "credential": "own", "n": 10})
+    assert ev is not None and validate_event(ev).signal == "judge_trend" and ev["content_capture"] is False
+    assert store.pending_count() == 1 and store.recent_signals(P1, "judge_trend")[0]["value"] == 0.75
+    assert e.emit_signal(P1, "judge_trend", float("nan"), {}) is None  # the contract refuses it; nothing is queued
+    assert e.emit_signal(P1, "not_a_signal", 0.5, {}) is None and store.counter("invalid_events") == 2
+    assert store.pending_count() == 1

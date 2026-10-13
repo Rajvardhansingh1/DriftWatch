@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     groq_api_key: str = Field("", alias="GROQ_API_KEY")
     google_api_key: str = Field("", alias="GOOGLE_API_KEY")
 
+    # The free allowance's relay (Plan 6). A SEPARATE provider key from the demo's, so the demo cap and users' quota
+    # never mix. DISABLE_FREE_PROXY=true closes the route (the database has its own switch and a daily budget).
+    free_proxy_groq_key: str = Field("", alias="FREE_PROXY_GROQ_KEY")
+    free_proxy_model: str = Field("qwen/qwen3.8-27b", alias="FREE_PROXY_MODEL")
+    disable_free_proxy: bool = Field(False, alias="DISABLE_FREE_PROXY")
+    # Proves to the database that a metering call comes from the relay (its sha256 is in private.quota_policies).
+    free_proxy_relay_secret: str = Field("", alias="FREE_PROXY_RELAY_SECRET")
+
     # Cloud control plane (Spec_Upgrade.md section 6.5). Empty by default -
     # local-only mode must work with none of these set. supabase_jwt_secret
     # is the legacy HS256 project JWT secret used to verify a Supabase
