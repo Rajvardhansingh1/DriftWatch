@@ -36,7 +36,7 @@ class SealError(Exception):
 
 def _b64(value: Any, length: int | None = None) -> bytes:
     try:
-        raw = base64.b64decode(value, validate=True)
+        raw = base64.b64decode(value.replace("\n", "") if isinstance(value, str) else value, validate=True)
     except (binascii.Error, ValueError, TypeError):
         raise SealError("could not read a field") from None
     if length is not None and len(raw) != length:

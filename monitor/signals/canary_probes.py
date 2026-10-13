@@ -2,10 +2,11 @@
 giving a small continuous accuracy signal essentially for free."""
 from __future__ import annotations
 
-import difflib
 from dataclasses import dataclass
 
 import yaml
+
+from driftwatch_llm.core.canary import score_answer  # noqa: F401  (the matching moved to core; re-exported)
 
 
 @dataclass
@@ -21,17 +22,6 @@ def load_probes(path: str) -> list[Probe]:
         data = yaml.safe_load(f) or {}
     return [Probe(**p) for p in data.get("probes", [])]
 
-
-def score_answer(actual: str, expected: str, match_type: str = "contains") -> bool:
-    actual_n = actual.strip().lower()
-    expected_n = expected.strip().lower()
-    if match_type == "exact":
-        return actual_n == expected_n
-    if match_type == "contains":
-        return expected_n in actual_n
-    if match_type == "fuzzy":
-        return difflib.SequenceMatcher(None, actual_n, expected_n).ratio() >= 0.6
-    raise ValueError(f"unknown match_type: {match_type}")
 
 
 class CanaryCache:

@@ -353,8 +353,8 @@ begin
     raise exception 'not found' using errcode = 'PT404';
   end if;
   insert into private.runner_audit (model_id, action) values (p_model_id, 'decrypt');
-  return jsonb_build_object('key_id', s.key_id, 'ephemeral', encode(s.ephemeral_public, 'base64'),
-                            'nonce', encode(s.nonce, 'base64'), 'ciphertext', encode(s.ciphertext, 'base64'));
+  return jsonb_build_object('key_id', s.key_id, 'ephemeral', replace(encode(s.ephemeral_public, 'base64'), E'\n', ''),
+                            'nonce', replace(encode(s.nonce, 'base64'), E'\n', ''), 'ciphertext', replace(encode(s.ciphertext, 'base64'), E'\n', ''));
 end;
 $$;
 revoke all on function public.runner_get_secret(text, uuid, uuid) from public;
@@ -372,7 +372,7 @@ begin
   perform private.require_runner(p_secret);
   perform private.require_lease(p_model_id, p_lease);
   select * into v from private.probe_vectors where model_id = p_model_id;
-  return jsonb_build_object('baseline', encode(v.baseline, 'base64'), 'recent', encode(v.recent, 'base64'), 'runs', coalesce(v.runs, 0));
+  return jsonb_build_object('baseline', replace(encode(v.baseline, 'base64'), E'\n', ''), 'recent', replace(encode(v.recent, 'base64'), E'\n', ''), 'runs', coalesce(v.runs, 0));
 end;
 $$;
 revoke all on function public.runner_get_vectors(text, uuid, uuid) from public;
