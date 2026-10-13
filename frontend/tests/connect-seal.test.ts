@@ -45,7 +45,7 @@ test("the sealing module is never imported by client code", () => {
     const src = readFileSync(f, "utf8");
     if (/connect\/seal/.test(src)) {
       assert.ok(!/^\s*["']use client["']/m.test(src), `${f} is a client file and imports the sealing module`);
-      assert.ok(/(actions?|route|page)\.tsx?$|\/actions\//.test(f.replace(/\/g, "/")), `${f} should be a server action, route or page`);
+      assert.ok(/(actions?|route|page)\.tsx?$|\/actions\//.test(f.split("\\").join("/")), `${f} should be a server action, route or page`);
     }
   }
 });
