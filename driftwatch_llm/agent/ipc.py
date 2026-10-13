@@ -211,7 +211,7 @@ def parse_message(raw: bytes) -> dict[str, Any]:
             raise ProtocolError("unknown baseline action")
         out["action"] = action
         out["project_id"] = _uuid(msg.get("project_id"))
-    elif kind in ("status", "stop"):
+    elif kind in ("status", "stop", "dashboard"):
         pass
     else:
         raise ProtocolError("unknown message type")

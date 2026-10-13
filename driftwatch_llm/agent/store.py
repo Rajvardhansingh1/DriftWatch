@@ -111,6 +111,20 @@ class AgentStore:
             ).fetchall()
         return [{"ts": r["ts"], "value": r["value"], "meta": json.loads(r["meta"])} for r in rows]
 
+    def signals_since(self, project_id: str, signal: str, since: float, limit: int = 500) -> list[dict[str, Any]]:
+        """The latest `limit` values after `since`, oldest first (what a chart wants)."""
+        with self._lock:
+            rows = self._con.execute(
+                "select ts, value, meta from signals where project_id = ? and signal = ? and ts >= ? "
+                "order by ts desc, id desc limit ?",
+                (project_id, signal, since, limit),
+            ).fetchall()
+        return [{"ts": r["ts"], "value": r["value"], "meta": json.loads(r["meta"])} for r in reversed(rows)]
+
+    def projects(self) -> list[str]:
+        with self._lock:
+            return [r[0] for r in self._con.execute("select distinct project_id from signals order by project_id")]
+
     # -- outbox -------------------------------------------------------------------------
     def enqueue(self, project_id: str, event: dict[str, Any]) -> bool:
         now = self._clock()

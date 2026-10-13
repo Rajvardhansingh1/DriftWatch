@@ -178,3 +178,16 @@ def test_concurrent_writers_do_not_lose_or_corrupt_rows(store):
     assert len(store.recent_signals(P1, "embedding_drift", limit=1000)) == 150
     assert len(store.recent_signals(P2, "embedding_drift", limit=1000)) == 150
     assert store.pending_count() == 300
+
+
+def test_signals_since_and_projects_for_the_local_dashboard(tmp_path):
+    clock = [1000.0]
+    store = AgentStore(tmp_path / "a.sqlite3", clock=lambda: clock[0])
+    for i, ts in enumerate([100.0, 500.0, 900.0]):
+        store.add_signal("p1", "embedding_drift", 0.1 * (i + 1), {"n": i}, ts=ts)
+    store.add_signal("p2", "combined_score", 0.5, ts=900.0)
+    rows = store.signals_since("p1", "embedding_drift", since=400.0, limit=10)
+    assert [r["ts"] for r in rows] == [500.0, 900.0]  # oldest first, the old one excluded
+    assert [r["ts"] for r in store.signals_since("p1", "embedding_drift", since=0.0, limit=2)] == [500.0, 900.0]  # the latest two
+    assert store.projects() == ["p1", "p2"]
+    store.close()

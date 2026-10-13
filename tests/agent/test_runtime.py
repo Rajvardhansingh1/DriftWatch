@@ -288,3 +288,31 @@ def test_events_say_which_embedder_made_them(tmp_path):
         capture(rt, f"B: {i}")
     rows = rt._store.recent_signals(P1, "embedding_drift", 5)
     assert rows and rows[0]["meta"]["embedder"] == "hash"
+
+
+def test_the_dashboard_message_starts_the_server_once_and_it_reads_the_agents_numbers(tmp_path):
+    import http.client
+
+    rt = make(tmp_path)
+    wait_loaded(rt)
+    for i in range(10):
+        capture(rt, f"A: {i}")
+    for i in range(5):
+        capture(rt, f"B: {i}")
+    first = rt.handle({"type": "dashboard"})
+    again = rt.handle({"type": "dashboard"})
+    try:
+        assert first["ok"] and first["port"] == again["port"] and first["token"] == again["token"]
+        conn = http.client.HTTPConnection("127.0.0.1", first["port"], timeout=5)
+        conn.request("POST", "/session", json.dumps({"token": first["token"]}), {"Content-Type": "application/json"})
+        r = conn.getresponse(); r.read()
+        cookie = r.getheader("Set-Cookie").split(";")[0]
+        conn.request("GET", f"/api/series?project={P1}&range=24h", headers={"Cookie": cookie})
+        series = json.loads(conn.getresponse().read())
+        assert len(series["embedding_drift"]) == 1 and set(series) >= {"embedding_drift", "combined_score", "self_consistency"}
+        conn.request("GET", "/api/status", headers={"Cookie": cookie})
+        status = json.loads(conn.getresponse().read())
+        assert status["sync"]["state"] in ("pending", "synced") and status["sync"]["pending"] == 2
+        assert "text" not in json.dumps(status).lower().replace("context", "")
+    finally:
+        rt.shutdown()

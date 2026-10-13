@@ -71,3 +71,10 @@ def test_burst_soak_and_compare_windows_run_clean(project):
     table = run(str(KIT / "compare_windows.py"))
     assert table.returncode == 0, table.stdout + table.stderr
     assert "SECRET" not in table.stdout
+
+
+def test_the_local_dashboard_matches_what_the_cloud_received(project):
+    proj, env = project
+    r = subprocess.run([sys.executable, str(KIT / "parity.py")], cwd=proj, env=env, capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, f"parity failed:\n{r.stdout[-3000:]}\n{r.stderr[-1500:]}"
+    assert "ALL GOOD" in r.stdout

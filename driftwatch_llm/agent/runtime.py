@@ -87,6 +87,7 @@ class AgentRuntime:
         self._embedder_state = "loading" if embedder_factory is not None else "skipped"
         self._embedder_started: float | None = None
         self._threads: list[threading.Thread] = []
+        self._dashboard: Any = None
         # The IPC thread only queues; one worker embeds and scores, so a slow model never stalls a connection.
         self._queue: deque[tuple[str, str, str, str | None]] = deque()
         self._queue_max = capture_queue
@@ -140,10 +141,27 @@ class AgentRuntime:
                 self._engine.reset(project)
                 return {"ok": True}
             return {"ok": True, "baseline": self._engine.baseline_status(project)}
+        if kind == "dashboard":
+            port, token = self._dashboard_start()
+            return {"ok": True, "port": port, "token": token}
         if kind == "stop":
             self._stop.set()
             return {"ok": True}
         return {"ok": True, "status": self._status()}
+
+    # -- local dashboard ----------------------------------------------------------------
+    def _dashboard_start(self) -> tuple[int, str]:
+        with self._clients_lock:
+            if self._dashboard is None:
+                from driftwatch_llm.agent.dashboard import DashboardServer
+
+                self._dashboard = DashboardServer(_DashboardView(self))
+                self._dashboard.start()
+            return self._dashboard.address[1], self._dashboard.token
+
+    def _touch_viewer(self) -> None:
+        with self._clients_lock:
+            self._touch(-1)["python"] = "dashboard"  # keeps the agent alive while a page is open
 
     def _embedder_view(self, now: float) -> str:
         if (
@@ -242,7 +260,67 @@ class AgentRuntime:
 
     def shutdown(self) -> None:
         self._stop.set()
+        if self._dashboard is not None:
+            self._dashboard.stop()
         self._server.stop()
         for t in self._threads:
             t.join(timeout=2.0)
         self._store.close()
+
+
+SERIES_SIGNALS = (
+    "embedding_drift", "self_consistency", "canary_accuracy", "judge_trend", "hallucination_score", "combined_score",
+)  # the names the website's charts use
+
+
+class _DashboardView:
+    """What the local dashboard may see: numbers and states, never response text (none is stored)."""
+
+    def __init__(self, runtime: AgentRuntime) -> None:
+        self._rt = runtime
+
+    def touch(self) -> None:
+        self._rt._touch_viewer()
+
+    def projects(self) -> list[str]:
+        return sorted(set(self._rt._store.projects()) | set(self._rt._engine.projects()))
+
+    def series(self, project_id: str, range_name: str) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from driftwatch_llm.agent.dashboard import RANGES
+
+        since = self._rt._clock() - RANGES[range_name]
+        out: dict[str, Any] = {}
+        for name in SERIES_SIGNALS:
+            rows = self._rt._store.signals_since(project_id, name, since, limit=500)
+            out[name] = [
+                {"timestamp": datetime.fromtimestamp(r["ts"], timezone.utc).isoformat(), "value": r["value"]} for r in rows
+            ]
+        return out
+
+    def status(self) -> dict[str, Any]:
+        rt = self._rt
+        sync = rt._sync.status()
+        pending = rt._store.pending_count()
+        parked = rt._store.parked()
+        if parked:
+            state = "paused"
+        elif pending and sync.get("last_error"):
+            state = "offline"
+        elif pending:
+            state = "pending"
+        else:
+            state = "synced"
+        return {
+            "sync": {
+                "state": state,
+                "pending": pending,
+                "last_success_at": sync.get("last_success_at"),
+                "last_error": sync.get("last_error"),
+                "parked": parked,
+            },
+            "embedder": rt._embedder_view(rt._clock()),
+            "baselines": {pid: rt._engine.baseline_status(pid) for pid in rt._engine.projects()},
+            "agent_version": __version__,
+        }

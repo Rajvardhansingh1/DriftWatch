@@ -409,3 +409,33 @@ def test_status_says_in_a_plain_sentence_when_responses_were_dropped(env):
     env.agent.replies["status"] = {"ok": True, "status": st}
     r = env.run("agent", "status")
     assert "7 responses were not captured" in r.output
+
+
+# ---- dashboard ----------------------------------------------------------------------------------------------------
+def test_dashboard_starts_the_agent_and_opens_the_browser_with_the_token_in_the_fragment(env):
+    env.services.ensure_agent = lambda: True
+    env.agent.replies["dashboard"] = {"ok": True, "port": 40123, "token": "TOKEN-VALUE-123"}
+    r = env.run("dashboard")
+    assert r.exit_code == 0, r.output
+    assert env.opened == ["http://127.0.0.1:40123/#token=TOKEN-VALUE-123"]
+    assert "TOKEN-VALUE-123" not in r.output and "http://127.0.0.1:40123" in r.output  # the secret is not echoed
+
+
+def test_dashboard_no_browser_prints_the_link_to_open_yourself(env):
+    env.services.ensure_agent = lambda: True
+    env.agent.replies["dashboard"] = {"ok": True, "port": 40123, "token": "TOKEN-VALUE-123"}
+    r = env.run("dashboard", "--no-browser")
+    assert r.exit_code == 0 and env.opened == [] and "http://127.0.0.1:40123/#token=TOKEN-VALUE-123" in r.output
+
+
+def test_dashboard_when_the_agent_cannot_start(env):
+    env.services.ensure_agent = lambda: False
+    r = env.run("dashboard")
+    assert r.exit_code == 1 and "could not start" in r.output.lower()
+
+
+def test_dashboard_with_an_agent_that_does_not_know_the_message_says_to_upgrade(env):
+    env.services.ensure_agent = lambda: True
+    env.agent.replies["dashboard"] = {"ok": False, "error": "unknown message type"}
+    r = env.run("dashboard")
+    assert r.exit_code == 1 and "agent stop" in r.output

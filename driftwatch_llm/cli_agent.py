@@ -414,3 +414,43 @@ def doctor(ctx: typer.Context) -> None:
         raise typer.Exit(1)
     typer.echo("")
     typer.echo("No problems found.")
+
+
+# -- dashboard -------------------------------------------------------------------------------------------
+@app.command()
+def dashboard(
+    ctx: typer.Context,
+    no_browser: bool = typer.Option(False, "--no-browser", help="Print the link instead of opening a browser."),
+) -> None:
+    """Open the local dashboard: your drift charts, served by the agent on this machine only."""
+    s = _svc(ctx)
+    if s.ensure_agent is not None:
+        started = s.ensure_agent()
+    else:
+        from driftwatch_llm.agent.launcher import ensure_agent
+
+        started = ensure_agent(s.home)
+    if not started:
+        _fail("Could not start the agent. Check `driftwatch doctor`.")
+    reply = agent_for(s).send({"type": "dashboard"})
+    if not reply or not reply.get("ok") or not isinstance(reply.get("port"), int) or not isinstance(reply.get("token"), str):
+        _fail("The running agent is older than this command (or did not answer). Run: driftwatch agent stop, then try again.")
+    base = f"http://127.0.0.1:{reply['port']}/"
+    link = f"{base}#token={reply['token']}"
+    if no_browser:
+        typer.echo("Open this link in your browser (it works on this machine only, and only for this run of the agent):")
+        typer.echo(link)
+        return
+    opener = s.open_url
+    if opener is None:
+        import webbrowser
+
+        opener = webbrowser.open
+    opened = False
+    try:
+        opened = bool(opener(link))
+    except Exception:  # noqa: BLE001
+        opened = False
+    typer.echo(f"The dashboard is at {base}")
+    if not opened:
+        typer.echo("Your browser could not be opened. Run again with --no-browser to get the link.")
