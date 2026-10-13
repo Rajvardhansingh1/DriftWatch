@@ -304,6 +304,7 @@ do $$ declare h jsonb; begin
   h := public.runner_health('runner-secret');
   if (h ->> 'enabled')::boolean or (h ->> 'models')::int <> 1 or (h ->> 'decrypts_24h')::int < 1 then raise exception 'FAIL: health %', h; end if;
   if h::text like '%model_id%' or h::text like '%ciphertext%' then raise exception 'FAIL: health leaks identifiers'; end if;
+  if (h -> 'key_ids' ->> '1')::int <> 1 then raise exception 'FAIL: health should count rows per key id %', h; end if;
 end $$;
 reset role;
 update private.runner_policy set enabled = true;

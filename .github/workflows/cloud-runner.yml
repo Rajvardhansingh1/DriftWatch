@@ -48,3 +48,4 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           RUNNER_SECRET: ${{ secrets.RUNNER_SECRET }}
           RUNNER_PRIVATE_KEY: ${{ secrets.RUNNER_PRIVATE_KEY }}
+          RUNNER_PRIVATE_KEYS: ${{ secrets.RUNNER_PRIVATE_KEYS }} # only during a key rotation (JSON map of key id to key)

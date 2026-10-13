@@ -517,7 +517,8 @@ begin
               where m.enabled and j.state <> 'dead' and j.due_at < now() - make_interval(mins => 2 * m.interval_minutes)),
     'dead', (select count(*) from private.connected_jobs where state = 'dead'),
     'decrypts_24h', (select count(*) from private.runner_audit where action = 'decrypt' and at > now() - interval '24 hours'),
-    'claims_24h', (select count(*) from private.runner_audit where action = 'claim' and at > now() - interval '24 hours')
+    'claims_24h', (select count(*) from private.runner_audit where action = 'claim' and at > now() - interval '24 hours'),
+    'key_ids', coalesce((select jsonb_object_agg(key_id::text, n) from (select key_id, count(*) as n from private.connected_secrets group by key_id) k), '{}'::jsonb)
   );
 end;
 $$;

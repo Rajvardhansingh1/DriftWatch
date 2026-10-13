@@ -31,7 +31,7 @@ def project(tmp_path):
         "DRIFTWATCH_HOME": str(home),
         "DRIFTWATCH_AGENT_EMBEDDER": "hash",
         "PYTHONPATH": str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", ""),
-        "DRIFTWATCH_AGENT_LINGER": "5",
+        "DRIFTWATCH_AGENT_LINGER": "30",  # the kit checks the agent between steps; the fixture stops it explicitly at the end
     }
     env.pop("DRIFTWATCH_API_KEY", None)
     yield proj, env

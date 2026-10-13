@@ -17,6 +17,7 @@ Rules this module keeps (GitHub Actions logs are public on a public repository):
 from __future__ import annotations
 
 import base64
+import json
 import os
 import sys
 import uuid
@@ -109,13 +110,14 @@ class Runner:
     def __init__(
         self,
         api: Any,
-        private_key: str,
+        private_key: str | dict[int, str],
         embedder: Any,
         complete: Callable[..., str] = provider_complete,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._api = api
-        self._private = private_key
+        # one private key (key id 1) or several by key id: during a rotation the old and the new are both held
+        self._privates: dict[int, str] = {1: private_key} if isinstance(private_key, str) else dict(private_key)
         self._embedder = embedder
         self._complete = complete
         self._now = now
@@ -144,7 +146,11 @@ class Runner:
             if len(probes) + EXTRA_SAMPLES > max_calls:
                 raise _Failure("runner_error")
             try:
-                key = seal.open_sealed(self._private, model_id, self._api.get_secret(model_id, lease))
+                box = self._api.get_secret(model_id, lease)
+                private = self._privates.get(box.get("key_id")) if isinstance(box, dict) else None
+                if private is None:  # sealed under a key id this runner no longer (or does not yet) hold
+                    raise _Failure("runner_error")
+                key = seal.open_sealed(private, model_id, box)
             except seal.SealError:
                 raise _Failure("runner_error") from None
             if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -227,15 +233,29 @@ class Runner:
         return events
 
 
+def _private_keys(env: dict[str, str]) -> dict[int, str] | None:
+    """RUNNER_PRIVATE_KEYS (a JSON map of key id to key, used during a rotation) or RUNNER_PRIVATE_KEY (key id 1)."""
+    raw = env.get("RUNNER_PRIVATE_KEYS")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            keys = {int(k): v for k, v in parsed.items()}
+        except (ValueError, TypeError, AttributeError):
+            return None
+        return keys if keys and all(isinstance(v, str) and v for v in keys.values()) else None
+    single = env.get("RUNNER_PRIVATE_KEY")
+    return {1: single} if single else None
+
+
 def main(env: dict[str, str] | None = None) -> int:
     env = dict(os.environ) if env is None else env
-    needed = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "RUNNER_SECRET", "RUNNER_PRIVATE_KEY")
-    if any(not env.get(k) for k in needed):
+    privates = _private_keys(env)
+    if privates is None or any(not env.get(k) for k in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "RUNNER_SECRET")):
         print("runner: missing settings", flush=True)
         return 2
     api = RunnerApi(env["SUPABASE_URL"], env["SUPABASE_ANON_KEY"], env["RUNNER_SECRET"])
     try:
-        runner = Runner(api, env["RUNNER_PRIVATE_KEY"], embedder=make_embedder("onnx"), complete=provider_complete)
+        runner = Runner(api, privates, embedder=make_embedder("onnx"), complete=provider_complete)
         summary = runner.run_once()
     except RunnerApiError as exc:
         print(f"runner: {exc}", flush=True)

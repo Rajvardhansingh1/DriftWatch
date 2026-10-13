@@ -297,3 +297,37 @@ def test_main_exits_non_zero_when_a_job_failed_and_zero_otherwise(monkeypatch, c
     assert runner_mod.main(env) == 1
     assert runner_mod.main({}) == 2  # missing settings: a clear, quiet failure
     assert PRIVATE not in capsys.readouterr().out
+
+
+# -- key rotation: the runner can hold several private keys, chosen by the key id sealed into each row ----------
+def test_rows_sealed_under_either_key_id_open_while_both_keys_are_held():
+    priv2, pub2 = seal.generate_keypair()
+    old, new = FakeApi(), FakeApi()
+    new.box = seal.seal(PROVIDER_KEY, new.model_id, 2, pub2)
+    for api in (old, new):
+        Runner(api, {1: PRIVATE, 2: priv2}, embedder=make_embedder("hash"), complete=provider()).run_once()
+        assert api.finished == [("ok", 5)]
+
+
+def test_a_retired_key_id_is_a_clear_runner_error_not_a_crash():
+    priv2, pub2 = seal.generate_keypair()
+    api = FakeApi()
+    api.box = seal.seal(PROVIDER_KEY, api.model_id, 2, pub2)
+    calls = []
+    Runner(api, {1: PRIVATE}, embedder=make_embedder("hash"), complete=provider(calls=calls)).run_once()  # key 2 is not held
+    assert api.finished == [("runner_error", 0)] and calls == []
+
+
+def test_main_reads_one_key_or_a_map_of_keys(monkeypatch):
+    priv2, pub2 = seal.generate_keypair()
+    api = FakeApi()
+    api.box = seal.seal(PROVIDER_KEY, api.model_id, 2, pub2)
+    monkeypatch.setattr(runner_mod, "RunnerApi", lambda *a, **k: api)
+    monkeypatch.setattr(runner_mod, "make_embedder", lambda kind: make_embedder("hash"))
+    monkeypatch.setattr(runner_mod, "provider_complete", provider())
+    base = {"SUPABASE_URL": "https://x.supabase.co", "SUPABASE_ANON_KEY": "anon", "RUNNER_SECRET": "s"}
+    assert runner_mod.main({**base, "RUNNER_PRIVATE_KEYS": json.dumps({"1": PRIVATE, "2": priv2})}) == 0
+    api2 = FakeApi()
+    monkeypatch.setattr(runner_mod, "RunnerApi", lambda *a, **k: api2)
+    assert runner_mod.main({**base, "RUNNER_PRIVATE_KEY": PRIVATE}) == 0  # a single key is key id 1
+    assert runner_mod.main({**base, "RUNNER_PRIVATE_KEYS": "not json"}) == 2
