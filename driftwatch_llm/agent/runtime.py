@@ -7,6 +7,7 @@ Lifetime: the agent exits `linger` seconds after the last heartbeat from any cli
 from __future__ import annotations
 
 import os
+from collections import deque
 import threading
 import time
 from pathlib import Path
@@ -23,6 +24,8 @@ from driftwatch_llm.secrets import SecretStore
 
 ALIVE_WINDOW = 15.0  # a client counts as connected for this long after its last message
 PRUNE_EVERY = 3600.0
+LOAD_TIMEOUT = 900.0  # a model still not loaded after this long is reported as failed (it may yet finish)
+CAPTURE_QUEUE = 1000  # responses waiting to be scored; the oldest are dropped (and counted) beyond this
 
 
 def _default_embedder() -> Any:
@@ -30,7 +33,16 @@ def _default_embedder() -> Any:
 
     # "onnx" (fastembed, the [agent] extra) by default. DRIFTWATCH_AGENT_EMBEDDER=sentence-transformers uses an
     # installed torch/sentence-transformers instead: the same model, handy where that is already installed.
-    return embedding.make_embedder(os.environ.get("DRIFTWATCH_AGENT_EMBEDDER", "onnx"))
+    kind = os.environ.get("DRIFTWATCH_AGENT_EMBEDDER", "onnx")
+    try:
+        return embedding.make_embedder(kind, local_only=True)  # a cached model loads without any network check
+    except Exception:  # noqa: BLE001 - not cached yet (or unreadable): fall back to the normal, downloading load
+        return embedding.make_embedder(kind)
+
+
+def _embedder_label() -> str:
+    """What events say produced them: the test embedder must never be mistaken for the real model."""
+    return "hash" if os.environ.get("DRIFTWATCH_AGENT_EMBEDDER") == "hash" else "minilm-l6-v2"
 
 
 class AgentRuntime:
@@ -46,6 +58,9 @@ class AgentRuntime:
         min_interval: float = MIN_INTERVAL_SECONDS,
         linger: float = 30.0,
         sync_interval: float = 10.0,
+        capture_queue: int = CAPTURE_QUEUE,
+        load_timeout: float = LOAD_TIMEOUT,
+        embedder_name: str | None = None,
     ) -> None:
         self._home = Path(home) if home is not None else paths.config_dir()
         self._clock = clock
@@ -54,8 +69,10 @@ class AgentRuntime:
         self._factory = embedder_factory
         self._store = AgentStore(ipc.agent_dir(self._home) / "agent.sqlite3", clock=clock)
         self._engine = Engine(
-            self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval
+            self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval,
+            embedder_name=embedder_name or _embedder_label(),
         )
+        self._load_timeout = load_timeout
         self._sync = SyncWorker(
             self._store,
             api if api is not None else Api(resolve(dev=os.environ.get("DRIFTWATCH_DEV") == "1")),
@@ -70,6 +87,12 @@ class AgentRuntime:
         self._embedder_state = "loading" if embedder_factory is not None else "skipped"
         self._embedder_started: float | None = None
         self._threads: list[threading.Thread] = []
+        self._dashboard: Any = None
+        # The IPC thread only queues; one worker embeds and scores, so a slow model never stalls a connection.
+        self._queue: deque[tuple[str, str, str, str | None]] = deque()
+        self._queue_max = capture_queue
+        self._queue_lock = threading.Lock()
+        self._work = threading.Event()
 
     # -- embedder -----------------------------------------------------------------------
     def load_embedder_now(self) -> None:
@@ -95,7 +118,7 @@ class AgentRuntime:
                 client = self._touch(msg["pid"])
                 client["python"] = msg.get("python", "")
                 client["sdks"] = msg.get("sdks", {})
-            return {"ok": True, "agent_version": __version__, "pid": os.getpid()}
+            return {"ok": True, "agent_version": __version__, "pid": os.getpid(), "protocol": ipc.PROTOCOL_VERSION}
         if kind == "heartbeat":
             with self._clients_lock:
                 client = self._touch(msg["pid"])
@@ -103,9 +126,13 @@ class AgentRuntime:
                     client["stats"] = msg["stats"]
             return {"ok": True}
         if kind == "capture":
-            events = self._engine.capture(msg["project_id"], msg["text"], msg["provider"], msg.get("model"))
-            self._store.bump("captured")
-            return {"ok": True, "emitted": len(events)}
+            with self._queue_lock:
+                if len(self._queue) >= self._queue_max:
+                    self._queue.popleft()
+                    self._store.bump("dropped_queue_full")
+                self._queue.append((msg["project_id"], msg["text"], msg["provider"], msg.get("model")))
+            self._work.set()
+            return {"ok": True}
         if kind == "baseline":
             project = msg["project_id"]
             if msg["action"] == "freeze":
@@ -114,10 +141,36 @@ class AgentRuntime:
                 self._engine.reset(project)
                 return {"ok": True}
             return {"ok": True, "baseline": self._engine.baseline_status(project)}
+        if kind == "dashboard":
+            port, token = self._dashboard_start()
+            return {"ok": True, "port": port, "token": token}
         if kind == "stop":
             self._stop.set()
             return {"ok": True}
         return {"ok": True, "status": self._status()}
+
+    # -- local dashboard ----------------------------------------------------------------
+    def _dashboard_start(self) -> tuple[int, str]:
+        with self._clients_lock:
+            if self._dashboard is None:
+                from driftwatch_llm.agent.dashboard import DashboardServer
+
+                self._dashboard = DashboardServer(_DashboardView(self))
+                self._dashboard.start()
+            return self._dashboard.address[1], self._dashboard.issue_token()
+
+    def _touch_viewer(self) -> None:
+        with self._clients_lock:
+            self._touch(-1)["python"] = "dashboard"  # keeps the agent alive while a page is open
+
+    def _embedder_view(self, now: float) -> str:
+        if (
+            self._embedder_state == "loading"
+            and self._embedder_started is not None
+            and now - self._embedder_started > self._load_timeout
+        ):
+            return "failed: timeout"
+        return self._embedder_state
 
     def _status(self) -> dict[str, Any]:
         now = self._clock()
@@ -138,9 +191,10 @@ class AgentRuntime:
         }
         return {
             "agent_version": __version__,
+            "protocol": ipc.PROTOCOL_VERSION,
             "pid": os.getpid(),
             "uptime_seconds": round(now - self._started, 1),
-            "embedder": self._embedder_state,
+            "embedder": self._embedder_view(now),
             "embedder_loading_seconds": (
                 round(now - self._embedder_started, 1)
                 if self._embedder_state == "loading" and self._embedder_started is not None
@@ -149,8 +203,28 @@ class AgentRuntime:
             "clients": clients,
             "projects": projects,
             "sync": self._sync.status(),
+            "queued": len(self._queue),
             "counters": self._store.counters(),
         }
+
+    def drain(self) -> None:
+        """Process everything queued, in the calling thread. The worker calls this; tests call it directly."""
+        while True:
+            with self._queue_lock:
+                if not self._queue:
+                    return
+                project_id, text, provider, model = self._queue.popleft()
+            try:
+                self._engine.capture(project_id, text, provider, model)
+                self._store.bump("captured")
+            except Exception:  # noqa: BLE001 - one bad response must not stop the worker
+                self._store.bump("capture_errors")
+
+    def _worker(self) -> None:
+        while not self._stop.is_set():
+            self._work.wait(0.5)
+            self._work.clear()
+            self.drain()
 
     # -- lifetime -----------------------------------------------------------------------
     def tick(self) -> bool:
@@ -166,6 +240,7 @@ class AgentRuntime:
         if self._factory is not None and self._embedder_state == "loading":
             self._spawn(self.load_embedder_now, "dw-embedder")
         self._spawn(self._sync_loop, "dw-sync")
+        self._spawn(self._worker, "dw-worker")
 
     def _spawn(self, target: Callable[[], None], name: str) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)
@@ -185,7 +260,67 @@ class AgentRuntime:
 
     def shutdown(self) -> None:
         self._stop.set()
+        if self._dashboard is not None:
+            self._dashboard.stop()
         self._server.stop()
         for t in self._threads:
             t.join(timeout=2.0)
         self._store.close()
+
+
+SERIES_SIGNALS = (
+    "embedding_drift", "self_consistency", "canary_accuracy", "judge_trend", "hallucination_score", "combined_score",
+)  # the names the website's charts use
+
+
+class _DashboardView:
+    """What the local dashboard may see: numbers and states, never response text (none is stored)."""
+
+    def __init__(self, runtime: AgentRuntime) -> None:
+        self._rt = runtime
+
+    def touch(self) -> None:
+        self._rt._touch_viewer()
+
+    def projects(self) -> list[str]:
+        return sorted(set(self._rt._store.projects()) | set(self._rt._engine.projects()))
+
+    def series(self, project_id: str, range_name: str) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from driftwatch_llm.agent.dashboard import RANGES
+
+        since = self._rt._clock() - RANGES[range_name]
+        out: dict[str, Any] = {}
+        for name in SERIES_SIGNALS:
+            rows = self._rt._store.signals_since(project_id, name, since, limit=500)
+            out[name] = [
+                {"timestamp": datetime.fromtimestamp(r["ts"], timezone.utc).isoformat(), "value": r["value"]} for r in rows
+            ]
+        return out
+
+    def status(self) -> dict[str, Any]:
+        rt = self._rt
+        sync = rt._sync.status()
+        pending = rt._store.pending_count()
+        parked = rt._store.parked()
+        if parked:
+            state = "paused"
+        elif pending and sync.get("last_error"):
+            state = "offline"
+        elif pending:
+            state = "pending"
+        else:
+            state = "synced"
+        return {
+            "sync": {
+                "state": state,
+                "pending": pending,
+                "last_success_at": sync.get("last_success_at"),
+                "last_error": sync.get("last_error"),
+                "parked": parked,
+            },
+            "embedder": rt._embedder_view(rt._clock()),
+            "baselines": {pid: rt._engine.baseline_status(pid) for pid in rt._engine.projects()},
+            "agent_version": __version__,
+        }

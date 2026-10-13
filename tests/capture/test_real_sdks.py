@@ -93,8 +93,10 @@ def test_chat_completions_sync_async_and_streaming(captured, kind):
     stream = cls(api_key="k", base_url="https://example.test/v1", http_client=sync_client(sdk, sse)).chat.completions.create(
         model="asked", messages=messages, stream=True
     )
-    assert captured == [] and wrappers.stats()["skipped_streaming"] == 1
-    assert len(list(stream)) >= 1  # the stream object is intact and usable
+    assert captured == []  # nothing recorded until the caller has consumed the stream
+    chunks = list(stream)
+    assert len(chunks) >= 1  # the stream is intact and usable
+    check_one(captured, kind, "hi")  # and the text was gathered as they consumed it
 
 
 def test_openai_errors_still_raise_exactly_as_before(captured):

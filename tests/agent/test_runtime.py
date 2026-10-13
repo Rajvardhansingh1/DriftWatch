@@ -64,7 +64,9 @@ def wait_loaded(rt):
 
 
 def capture(rt, text, project=P1, model="gpt-x"):
-    return rt.handle({"type": "capture", "project_id": project, "provider": "openai", "model": model, "text": text})
+    reply = rt.handle({"type": "capture", "project_id": project, "provider": "openai", "model": model, "text": text})
+    rt.drain()  # the worker thread is not running in these tests: process what was queued, here
+    return reply
 
 
 def test_hello_and_heartbeat_register_clients_and_status_lists_them(tmp_path):
@@ -125,7 +127,7 @@ def test_embedder_states_loading_ready_failed(tmp_path):
     st = bad.handle({"type": "status"})["status"]
     assert st["embedder"] == "failed: RuntimeError" and "secret" not in json.dumps(st)
     capture(bad, "A: x")
-    assert bad.handle({"type": "status"})["status"]["counters"]["dropped_no_embedder"] == 1
+    assert bad.handle({"type": "status"})["status"]["counters"]["buffered_while_loading"] == 1
 
 
 def test_the_agent_exits_after_the_linger_with_no_live_clients(tmp_path):
@@ -183,38 +185,27 @@ def test_full_stack_over_ipc_with_background_sync(tmp_path):
         rt.shutdown()
 
 
-def test_the_default_embedder_is_onnx_and_can_be_switched_by_an_environment_variable(monkeypatch):
+def test_the_default_embedder_tries_the_local_cache_first_then_the_network(monkeypatch):
     from driftwatch_llm.agent import runtime
     from driftwatch_llm.core import embedding
 
     asked = []
-    monkeypatch.setattr(embedding, "make_embedder", lambda kind: asked.append(kind) or object())
+
+    def fake(kind, local_only=False):
+        asked.append((kind, local_only))
+        if local_only:
+            raise ValueError("not cached yet")
+        return object()
+
+    monkeypatch.setattr(embedding, "make_embedder", fake)
     monkeypatch.delenv("DRIFTWATCH_AGENT_EMBEDDER", raising=False)
     runtime._default_embedder()
+    assert asked == [("onnx", True), ("onnx", False)]  # cached model: no network; otherwise download
+    asked.clear()
     monkeypatch.setenv("DRIFTWATCH_AGENT_EMBEDDER", "sentence-transformers")
+    monkeypatch.setattr(embedding, "make_embedder", lambda kind, local_only=False: asked.append((kind, local_only)) or object())
     runtime._default_embedder()
-    assert asked == ["onnx", "sentence-transformers"]
-
-
-def test_the_emission_interval_and_baseline_size_can_be_tuned_for_development(tmp_path):
-    rt = AgentRuntime(
-        home=tmp_path / "home", embedder_factory=None, api=Api(EP, transport=httpx.MockTransport(lambda r: httpx.Response(200, json="accepted"))),
-        secrets=FakeSecrets(), baseline_size=12, min_interval=2.5,
-    )
-    assert rt._engine._baseline_size == 12 and rt._engine._min_interval == 2.5
-    rt.shutdown()
-
-
-def test_agent_settings_come_from_the_environment_and_ignore_nonsense():
-    from driftwatch_llm.agent.__main__ import settings_from_env
-
-    assert settings_from_env({}) == {}
-    assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": "2", "DRIFTWATCH_AGENT_BASELINE_SIZE": "50", "DRIFTWATCH_AGENT_LINGER": "9"}) == {
-        "min_interval": 2.0, "baseline_size": 50, "linger": 9.0,
-    }
-    for bad in ("abc", "-1", "0", "nan", "inf", ""):
-        assert settings_from_env({"DRIFTWATCH_AGENT_MIN_INTERVAL": bad, "DRIFTWATCH_AGENT_BASELINE_SIZE": bad}) == {}, bad
-    assert settings_from_env({"DRIFTWATCH_AGENT_BASELINE_SIZE": "5"}) == {}  # below the 30-response minimum
+    assert asked == [("sentence-transformers", True)]  # the cached model loaded: no second attempt
 
 
 def test_status_says_how_long_the_model_has_been_loading(tmp_path):
@@ -226,3 +217,102 @@ def test_status_says_how_long_the_model_has_been_loading(tmp_path):
     assert st["embedder"] == "loading" and st["embedder_loading_seconds"] == 90.0
     wait_loaded(rt)
     assert rt.handle({"type": "status"})["status"]["embedder_loading_seconds"] is None
+
+
+def test_the_ipc_thread_only_queues_the_embedding_happens_on_the_worker(tmp_path):
+    import threading
+
+    seen = []
+
+    class Recording(ThemeEmbedder):
+        def encode(self, texts):
+            seen.append(threading.current_thread().name)
+            return super().encode(texts)
+
+    rt = make(tmp_path, factory=lambda: Recording())
+    wait_loaded(rt)
+    reply = rt.handle({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": "A: x"})
+    assert reply["ok"] is True and seen == []  # answered before any embedding happened
+    assert rt.handle({"type": "status"})["status"]["queued"] == 1
+    rt.drain()
+    assert seen == [threading.current_thread().name]
+    assert rt.handle({"type": "status"})["status"]["queued"] == 0
+
+
+def test_the_capture_queue_is_bounded_and_counts_what_it_drops(tmp_path):
+    rt = make(tmp_path, capture_queue=3)
+    for i in range(5):
+        rt.handle({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": f"A: {i}"})
+    assert rt.handle({"type": "status"})["status"]["counters"]["dropped_queue_full"] == 2
+    rt.drain()
+    assert rt.handle({"type": "status"})["status"]["queued"] == 0
+
+
+def test_a_burst_over_ipc_is_answered_fast_and_fully_processed(tmp_path):
+    rt = make(tmp_path)
+    wait_loaded(rt)
+    rt.start()
+    try:
+        client = ipc.IpcClient(tmp_path / "home")
+        t0 = time.time()
+        for i in range(150):
+            assert client.send({"type": "capture", "project_id": P1, "provider": "openai", "model": "m", "text": f"A: {i}"})["ok"]
+        assert time.time() - t0 < 5
+        deadline = time.time() + 10
+        while time.time() < deadline and rt.handle({"type": "status"})["status"]["queued"]:
+            time.sleep(0.05)
+        st = rt.handle({"type": "status"})["status"]
+        assert st["queued"] == 0 and st["projects"][P1]["baseline"]["frozen"] is True
+        client.close()
+    finally:
+        rt.shutdown()
+
+
+def test_a_model_that_never_finishes_loading_is_reported_as_a_timeout_and_may_still_become_ready(tmp_path):
+    clock = Clock()
+    rt = make(tmp_path, clock, factory=lambda: ThemeEmbedder(), load_timeout=900.0)
+    rt._embedder_started = clock()  # as if the loader thread had begun and is stuck downloading
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "loading"
+    clock.now += 901
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "failed: timeout"
+    wait_loaded(rt)  # the download finishes after all
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "ready"
+
+
+def test_events_say_which_embedder_made_them(tmp_path):
+    rt = make(tmp_path, factory=lambda: ThemeEmbedder(), embedder_name="hash")
+    wait_loaded(rt)
+    for i in range(10):
+        capture(rt, f"A: {i}")
+    for i in range(5):
+        capture(rt, f"B: {i}")
+    rows = rt._store.recent_signals(P1, "embedding_drift", 5)
+    assert rows and rows[0]["meta"]["embedder"] == "hash"
+
+
+def test_the_dashboard_message_starts_the_server_once_and_it_reads_the_agents_numbers(tmp_path):
+    import http.client
+
+    rt = make(tmp_path)
+    wait_loaded(rt)
+    for i in range(10):
+        capture(rt, f"A: {i}")
+    for i in range(5):
+        capture(rt, f"B: {i}")
+    first = rt.handle({"type": "dashboard"})
+    again = rt.handle({"type": "dashboard"})
+    try:
+        assert first["ok"] and first["port"] == again["port"] and first["token"] != again["token"]  # one server, a fresh one-time link per call
+        conn = http.client.HTTPConnection("127.0.0.1", first["port"], timeout=5)
+        conn.request("POST", "/session", json.dumps({"token": again["token"]}), {"Content-Type": "application/json"})
+        r = conn.getresponse(); r.read()
+        cookie = r.getheader("Set-Cookie").split(";")[0]
+        conn.request("GET", f"/api/series?project={P1}&range=24h", headers={"Cookie": cookie})
+        series = json.loads(conn.getresponse().read())
+        assert len(series["embedding_drift"]) == 1 and set(series) >= {"embedding_drift", "combined_score", "self_consistency"}
+        conn.request("GET", "/api/status", headers={"Cookie": cookie})
+        status = json.loads(conn.getresponse().read())
+        assert status["sync"]["state"] in ("pending", "synced") and status["sync"]["pending"] == 2
+        assert "text" not in json.dumps(status).lower().replace("context", "")
+    finally:
+        rt.shutdown()

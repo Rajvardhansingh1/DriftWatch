@@ -114,13 +114,19 @@ def test_an_async_exception_propagates_and_records_nothing(monkeypatch, versions
     assert clean == []
 
 
-def test_streaming_calls_are_skipped_and_counted_and_the_stream_object_is_untouched(monkeypatch, versions, clean):
+def test_a_stream_is_wrapped_not_skipped_and_the_caller_still_gets_every_item(monkeypatch, versions, clean):
     sync_cls, _ = fake_openai(monkeypatch)
-    stream = iter(["chunk"])
+    chunks = [chat_chunk_for_test("a"), chat_chunk_for_test("b")]
     wrappers.patch_loaded()
-    got = sync_cls(result=stream).create(messages=[], model="m", stream=True)
-    assert got is stream and clean == []
-    assert wrappers.stats()["skipped_streaming"] == 1
+    got = sync_cls(result=iter(chunks)).create(messages=[], model="m", stream=True)
+    assert list(got) == chunks
+    assert [r["text"] for r in clean] == ["ab"]
+
+
+def chat_chunk_for_test(text):
+    from types import SimpleNamespace as NS
+
+    return NS(choices=[NS(delta=NS(content=text))], model="gpt-test")
 
 
 def test_responses_api_and_anthropic_and_google_extractors(monkeypatch, versions, clean):

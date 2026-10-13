@@ -119,7 +119,7 @@ test("copy vocabulary is gated on the feature it describes", () => {
 });
 
 test("the install command is the real package name everywhere, never the unrelated `driftwatch` on PyPI", () => {
-  assert.equal(HOW_TO_STEPS[0].command, "pip install driftwatch-llm");
+  assert.equal(HOW_TO_STEPS[0].command, 'pip install "driftwatch-llm[agent]"');
   const walk = (d: string): string[] =>
     readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]));
   for (const f of [...walk("app"), ...walk("public"), ...walk("lib")]) {

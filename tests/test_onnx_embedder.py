@@ -9,7 +9,7 @@ from monitor.signals import embedding_drift as ed
 
 def test_onnx_embedder_has_encode_shape(monkeypatch):
     class FakeTE:
-        def __init__(self, name):
+        def __init__(self, name, **kwargs):
             pass
 
         def embed(self, texts):

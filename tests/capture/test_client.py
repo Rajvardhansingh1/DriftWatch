@@ -70,7 +70,7 @@ def test_records_reach_the_agent_after_a_hello_and_a_heartbeat_with_stats(home):
         assert hello["project_id"] == PID and isinstance(hello["pid"], int) and hello["python"].count(".") == 2
         assert wait_for(lambda: rec.of("heartbeat"))
         stats = rec.of("heartbeat")[-1]["stats"]
-        assert stats["sent"] == 2 and set(stats) <= {"captured", "skipped_streaming", "skipped_other", "errors", "dropped", "sent", "send_failures"}
+        assert stats["sent"] == 2 and set(stats) <= {"captured", "skipped_streaming", "skipped_partial", "skipped_other", "errors", "dropped", "sent", "send_failures"}
     finally:
         client.stop()
         server.stop()

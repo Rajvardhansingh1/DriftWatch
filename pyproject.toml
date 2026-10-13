@@ -30,6 +30,9 @@ path = "driftwatch_llm/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["driftwatch_llm"]
+# The local dashboard page is built at release time (frontend: npm run build:local) and git-ignored; ship it anyway.
+artifacts = ["driftwatch_llm/dashboard_static/**"]
 
 [tool.hatch.build.targets.sdist]
 include = ["driftwatch_llm", "pyproject.toml", "LICENSE"]
+artifacts = ["driftwatch_llm/dashboard_static/**"]

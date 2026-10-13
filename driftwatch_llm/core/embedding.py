@@ -19,15 +19,46 @@ class OnnxEmbedder:
         return np.stack(list(self._model.embed(texts)))
 
 
-def make_embedder(kind: str):
-    """"onnx" builds the fastembed (ONNX) embedder; anything else builds sentence-transformers (torch)."""
+class HashEmbedder:
+    """Dependency-free stand-in for tests and CI: words and word pairs hashed into 256 buckets, then normalised.
+
+    Texts about the same thing land close together, texts about different things far apart, which is all the
+    agent's tests need. It is NOT a real embedding: never use it to judge actual drift."""
+
+    DIM = 256
+
+    def encode(self, texts):
+        import hashlib
+        import re
+
+        out = np.zeros((len(texts), self.DIM), dtype=np.float32)
+        for row, text in enumerate(texts):
+            words = re.findall(r"[a-z0-9]+", str(text).lower())
+            for token in words + [f"{a} {b}" for a, b in zip(words, words[1:])]:
+                digest = hashlib.sha256(token.encode("utf-8")).digest()
+                out[row, int.from_bytes(digest[:4], "big") % self.DIM] += 1.0 if digest[4] & 1 else -1.0
+            if not out[row].any():
+                out[row, 0] = 1.0  # an empty text still gets a valid unit vector
+            out[row] /= float(np.linalg.norm(out[row]))
+        return out
+
+
+def make_embedder(kind: str, local_only: bool = False):
+    """"onnx" builds the fastembed (ONNX) embedder; anything else builds sentence-transformers (torch).
+
+    local_only=True never touches the network: it raises if the model is not already cached.
+    "hash" is the tiny test double above (selected with DRIFTWATCH_AGENT_EMBEDDER=hash in tests and CI)."""
+    if kind == "hash":
+        return HashEmbedder()
     if kind == "onnx":
         from fastembed import TextEmbedding
 
-        return OnnxEmbedder(TextEmbedding(f"sentence-transformers/{MODEL_NAME}"))
+        extra = {"local_files_only": True} if local_only else {}
+        return OnnxEmbedder(TextEmbedding(f"sentence-transformers/{MODEL_NAME}", **extra))
     from sentence_transformers import SentenceTransformer
 
-    return SentenceTransformer(MODEL_NAME)
+    extra = {"local_files_only": True} if local_only else {}
+    return SentenceTransformer(MODEL_NAME, **extra)
 
 
 def _median_heuristic_gamma(x: np.ndarray, y: np.ndarray) -> float:

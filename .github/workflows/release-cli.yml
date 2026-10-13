@@ -29,6 +29,17 @@ jobs:
       - run: pip install typer httpx keyring platformdirs pytest pytest-asyncio hatchling build
       # --confcutdir skips tests/conftest.py, which imports the server settings this job does not install
       - run: pytest tests/cli -q --confcutdir=tests/cli
+      # The local dashboard page: built from the shared frontend components, shipped inside the wheel.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build:local
+        working-directory: frontend
+      - run: test -f driftwatch_llm/dashboard_static/index.html
       - run: python -m build
       - uses: actions/upload-artifact@v4
         with:

@@ -92,3 +92,8 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+examples/agent_testkit/.phases.json
+
+# The local dashboard page is built at release time (frontend: npm run build:local)
+driftwatch_llm/dashboard_static/

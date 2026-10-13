@@ -324,10 +324,15 @@ def test_the_client_refuses_a_socket_directory_that_others_can_write_to(home, tm
 
 @pytest.mark.skipif(not POSIX, reason="POSIX socket directory location")
 def test_the_socket_prefers_the_per_user_runtime_directory(tmp_path, monkeypatch):
-    runtime = tmp_path / "run"
-    runtime.mkdir()
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
-    assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
+    import shutil
+    import tempfile
+
+    runtime = Path(tempfile.mkdtemp(prefix="dwrt"))  # short, like /run/user/1000 (a long one falls back to /tmp)
+    try:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+        assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
+    finally:
+        shutil.rmtree(runtime, ignore_errors=True)
     monkeypatch.delenv("XDG_RUNTIME_DIR")
     assert "/driftwatch-" in ipc.address_for(tmp_path / "h")
 
@@ -342,3 +347,10 @@ def test_the_endpoint_name_cannot_be_predicted_without_the_key(tmp_path):
     (home / "agent" / "agent.key").unlink()  # a new key means a new, equally unpredictable, name
     ipc.load_or_create_authkey(home)
     assert ipc.address_for(home) != address
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="AF_UNIX paths are a POSIX limit")
+def test_the_socket_path_stays_under_the_af_unix_limit_even_with_a_long_temp_dir(home, monkeypatch):
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.setattr(ipc.tempfile, "gettempdir", lambda: "/var/folders/" + "x" * 120 + "/T")
+    assert len(os.fsencode(ipc.address_for(home))) <= 100  # sun_path holds 104 bytes on macOS, 108 on Linux
