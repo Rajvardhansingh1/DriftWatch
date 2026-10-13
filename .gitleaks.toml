@@ -23,3 +23,9 @@ description = "A made-up JWT-shaped string: the redaction tests must prove a tok
 condition = "AND"
 paths = ['''^tests/core/test_redact\.py$''']
 regexes = ['''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dBjftJeZ4CVPmB92K27uhbUJU1p1r''']
+
+[[allowlists]]
+description = "A throwaway X25519 private key inside the committed seal test vectors. It protects only the made-up values in the same file (see tests/test_seal.py); no real secret is ever sealed with it."
+condition = "AND"
+paths = ['''^tests/fixtures/seal_v1\.json$''']
+regexes = ['''^[A-Za-z0-9+/=]{44}$''']
