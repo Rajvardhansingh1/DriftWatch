@@ -15,6 +15,7 @@ from typing import Any
 import typer
 
 from driftwatch_llm.cli import Services, _fail, _project, _svc, app
+from driftwatch_llm.project import ConfigError, find_project_root, read_config
 from driftwatch_llm.hooks import autostart_installed, install_autostart_hook, remove_autostart_hook
 
 agent_app = typer.Typer(help="The background agent that scores your LLM calls locally.", no_args_is_help=True)
@@ -121,6 +122,14 @@ def agent_status(ctx: typer.Context) -> None:
         return
     st = reply["status"]
     typer.echo(f"agent: running (pid {st['pid']}, up {_uptime(st['uptime_seconds'])}, v{st['agent_version']})")
+    theirs = st.get("protocol")
+    if theirs is not None:
+        from driftwatch_llm.agent.ipc import PROTOCOL_VERSION
+
+        if theirs < PROTOCOL_VERSION:
+            typer.echo("  This agent is older than the installed package (left over from before an upgrade). Run: driftwatch agent stop")
+        elif theirs > PROTOCOL_VERSION:
+            typer.echo('  This agent is newer than this command. Upgrade: pip install --upgrade "driftwatch-llm[agent]"')
     embedder = st["embedder"]
     waited = st.get("embedder_loading_seconds")
     typer.echo(f"embedder: {embedder}" + (f" ({_uptime(waited)} so far)" if embedder == "loading" and waited else ""))
@@ -195,6 +204,27 @@ def agent_warmup(
         elif waited >= 60 and int(waited) % 30 < 5:
             typer.echo(f"  still loading ({_uptime(waited)}); a slow connection can take a few minutes. About 90 MB is being downloaded.")
         s.sleep(2.0)
+
+
+@agent_app.command("rotate-key")
+def agent_rotate_key(
+    ctx: typer.Context,
+    no_browser: bool = typer.Option(False, "--no-browser", help="Print the link instead of opening a browser."),
+) -> None:
+    """Replace this project's key: get a fresh one through your browser and revoke the old one."""
+    from driftwatch_llm.cli import _device_login, _revoke_quietly, _store_key
+
+    s = _svc(ctx)
+    root, cfg = _project(s)
+    if not s.trust.is_trusted(root, cfg.project_id):
+        _fail("This folder is not trusted yet. Run `driftwatch trust` first.")
+    result = _device_login(s, open_browser=not no_browser)
+    assert result.api_key and result.project_id
+    if result.project_id != cfg.project_id:
+        _revoke_quietly(s, result.api_key)
+        _fail("You approved a different project than the one this folder is linked to. Nothing changed.")
+    _store_key(s, cfg.project_id, result.api_key)
+    typer.echo("The key was replaced and the old one revoked. The running agent picks up the new key on its next sync.")
 
 
 @agent_app.command("stop")
@@ -300,3 +330,85 @@ def run(
 
         code = run_command(command, s.cwd())
     raise typer.Exit(code)
+
+
+# -- doctor ----------------------------------------------------------------------------------------------
+@app.command()
+def doctor(ctx: typer.Context) -> None:
+    """Check this machine and folder for the usual causes of "nothing shows up", and say how to fix each."""
+    s = _svc(ctx)
+    problems = 0
+
+    def good(text: str) -> None:
+        typer.echo(f"ok       {text}")
+
+    def bad(text: str, fix: str) -> None:
+        nonlocal problems
+        problems += 1
+        typer.echo(f"PROBLEM  {text}")
+        typer.echo(f"         fix: {fix}")
+
+    if sys.version_info >= (3, 9):
+        good(f"python {sys.version_info.major}.{sys.version_info.minor}")
+    else:
+        bad("python is older than 3.9", "use a newer Python")
+    if agent_extra_installed():
+        good("agent packages installed")
+    else:
+        bad("the agent packages are missing", 'pip install "driftwatch-llm[agent]"')
+
+    root = find_project_root(s.cwd())
+    cfg = None
+    if root is None:
+        bad("this folder is not linked to a project", "driftwatch init")
+    else:
+        try:
+            cfg = read_config(root)
+        except ConfigError:
+            cfg = None
+        if cfg is None:
+            bad("the project config here is unreadable", "driftwatch init --force")
+        else:
+            good(f"linked to project {cfg.project_id}")
+            if s.trust.is_trusted(root, cfg.project_id):
+                good("folder is trusted")
+            else:
+                bad("this folder is not trusted", "driftwatch trust")
+            if s.secrets.load(cfg.project_id) is not None:
+                good("a key is stored on this machine")
+            else:
+                bad("no key is stored on this machine", "driftwatch login")
+
+    hook = hook_installed(s)
+    if hook:
+        good("autostart is on")
+    else:
+        typer.echo("note     autostart is off (monitoring runs only under `driftwatch run -- python app.py`); turn on: driftwatch autostart enable")
+
+    reply = agent_for(s).send({"type": "status"})
+    if not reply or not reply.get("ok") or "status" not in reply:
+        typer.echo("note     the agent is not running (it starts by itself with the first LLM call in a trusted project)")
+    else:
+        st = reply["status"]
+        good(f"agent running (pid {st['pid']})")
+        embedder = st["embedder"]
+        if embedder == "ready":
+            good("model loaded")
+        elif embedder.startswith("failed"):
+            bad("the model could not be loaded", 'pip install --upgrade "driftwatch-llm[agent]"')
+        elif embedder == "loading":
+            typer.echo("note     the model is still loading (the first run downloads about 90 MB); wait with: driftwatch agent warmup")
+        for pid, info in st["projects"].items():
+            if info.get("parked") == "needs_login":
+                bad(f"project {pid} is waiting for a key", "driftwatch login")
+            elif info.get("parked") == "auth_failed":
+                bad(f"project {pid}: the key was rejected", "driftwatch agent rotate-key")
+        err = st["sync"].get("last_error")
+        if err:
+            bad(f"the last sync failed: {err}", "check your internet connection; events stay queued and are sent later")
+    if problems:
+        typer.echo("")
+        typer.echo(f"{problems} problem(s) found.")
+        raise typer.Exit(1)
+    typer.echo("")
+    typer.echo("No problems found.")

@@ -107,7 +107,7 @@ class AgentRuntime:
                 client = self._touch(msg["pid"])
                 client["python"] = msg.get("python", "")
                 client["sdks"] = msg.get("sdks", {})
-            return {"ok": True, "agent_version": __version__, "pid": os.getpid()}
+            return {"ok": True, "agent_version": __version__, "pid": os.getpid(), "protocol": ipc.PROTOCOL_VERSION}
         if kind == "heartbeat":
             with self._clients_lock:
                 client = self._touch(msg["pid"])
@@ -154,6 +154,7 @@ class AgentRuntime:
         }
         return {
             "agent_version": __version__,
+            "protocol": ipc.PROTOCOL_VERSION,
             "pid": os.getpid(),
             "uptime_seconds": round(now - self._started, 1),
             "embedder": self._embedder_state,

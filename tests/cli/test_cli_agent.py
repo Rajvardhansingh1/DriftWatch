@@ -8,7 +8,7 @@ import pytest
 
 from driftwatch_llm import cli as cli_module
 from driftwatch_llm import cli_agent
-from tests.cli.test_cli import KEY, PID, Env, FakeApi, runner  # noqa: F401  (shared fakes)
+from tests.cli.test_cli import KEY, KEY_OLD, PID, Env, FakeApi, runner  # noqa: F401  (shared fakes)
 
 SECRET_TEXT = "A-RESPONSE-THAT-MUST-NEVER-BE-PRINTED"
 
@@ -321,3 +321,84 @@ def test_warmup_when_the_agent_cannot_start(env):
     env.services.ensure_agent = lambda: False
     r = env.run("agent", "warmup")
     assert r.exit_code == 1 and "could not start" in r.output.lower()
+
+
+# ---- agent rotate-key ---------------------------------------------------------------------------------------------
+def test_rotate_key_swaps_the_key_revokes_the_old_one_and_tells_the_agent_nothing_secret(env):
+    env.link(key=KEY_OLD)
+    r = env.run("agent", "rotate-key")
+    assert r.exit_code == 0, r.output
+    assert env.secrets.load(PID) == (KEY, "keychain") and env.api.revoked == [KEY_OLD]
+    assert "next sync" in r.output.lower()
+    assert all(m["type"] != "key" for m in env.agent.sent)  # the agent reads keys from the keychain itself
+
+
+def test_rotate_key_needs_a_trusted_project(env):
+    r = env.run("agent", "rotate-key")
+    assert r.exit_code == 1 and "driftwatch init" in r.output
+
+
+# ---- protocol version ---------------------------------------------------------------------------------------------
+def test_status_warns_when_the_running_agent_speaks_another_protocol(env):
+    env.agent.replies["status"] = {"ok": True, "status": dict(STATUS, protocol=0)}
+    r = env.run("agent", "status")
+    assert "older" in r.output.lower() and "agent stop" in r.output
+
+
+def test_status_is_quiet_when_the_protocol_matches(env):
+    from driftwatch_llm.agent.ipc import PROTOCOL_VERSION
+
+    env.agent.replies["status"] = {"ok": True, "status": dict(STATUS, protocol=PROTOCOL_VERSION)}
+    r = env.run("agent", "status")
+    assert "older" not in r.output.lower() and "newer" not in r.output.lower()
+
+
+# ---- doctor -------------------------------------------------------------------------------------------------------
+def healthy(env, monkeypatch):
+    env.link(key=KEY)
+    monkeypatch.setattr(cli_agent, "agent_extra_installed", lambda: True)
+    env.hook_state["path"] = env.hook_path
+
+
+def test_doctor_all_good(env, monkeypatch):
+    healthy(env, monkeypatch)
+    r = env.run("doctor")
+    assert r.exit_code == 0, r.output
+    assert "PROBLEM" not in r.output and "No problems found" in r.output and r.output.count("ok  ") >= 5
+
+
+def test_doctor_names_each_problem_with_its_fix(env, monkeypatch):
+    monkeypatch.setattr(cli_agent, "agent_extra_installed", lambda: False)
+    r = env.run("doctor")
+    assert r.exit_code == 1
+    out = r.output
+    assert "driftwatch-llm[agent]" in out and "driftwatch init" in out
+
+
+def test_doctor_flags_an_untrusted_folder_and_a_missing_key(env, monkeypatch):
+    healthy(env, monkeypatch)
+    env.secrets.delete(PID)
+    env.trust.untrust(env.project)
+    r = env.run("doctor")
+    assert r.exit_code == 1 and "driftwatch login" in r.output and "driftwatch trust" in r.output
+
+
+def test_doctor_reports_agent_trouble(env, monkeypatch):
+    healthy(env, monkeypatch)
+    env.agent.replies["status"] = {"ok": True, "status": dict(STATUS, embedder="failed: ImportError",
+                                                              sync=dict(STATUS["sync"], last_error="HTTP 500"))}
+    r = env.run("doctor")
+    assert r.exit_code == 1 and "model" in r.output.lower() and "HTTP 500" in r.output
+
+
+def test_doctor_an_agent_that_is_not_running_is_fine(env, monkeypatch):
+    healthy(env, monkeypatch)
+    env.agent.absent = True
+    r = env.run("doctor")
+    assert r.exit_code == 0 and "not running" in r.output.lower()
+
+
+def test_doctor_never_prints_a_key(env, monkeypatch):
+    healthy(env, monkeypatch)
+    r = env.run("doctor")  # Env.run asserts that no key appears
+    assert r.exit_code == 0

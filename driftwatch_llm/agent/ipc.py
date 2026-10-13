@@ -38,6 +38,7 @@ MAX_MESSAGE = 64 * 1024
 HANDSHAKE_TIMEOUT = 5.0
 IDLE_TIMEOUT = 300.0
 MAX_CLIENTS = 64
+PROTOCOL_VERSION = 2  # bumps whenever messages change in a way an older agent or client cannot follow
 _MAGIC = b"DW2"
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 _SDK_STATUSES = {"patched", "unsupported", "skipped"}
