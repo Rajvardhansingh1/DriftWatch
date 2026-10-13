@@ -47,3 +47,27 @@ def test_the_kit_passes_end_to_end(project):
     tail = "\n".join(r.stdout.splitlines()[-40:])
     assert r.returncode == 0, f"kit failed:\n{tail}\n{r.stderr[-2000:]}"
     assert "All good" in r.stdout
+
+
+def test_offline_then_online_delivers_everything_once(project):
+    proj, env = project
+    r = subprocess.run([sys.executable, str(KIT / "offline.py")], cwd=proj, env=env, capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, f"offline scenario failed:\n{r.stdout[-3000:]}\n{r.stderr[-1500:]}"
+    assert "ALL GOOD" in r.stdout
+
+
+def test_burst_soak_and_compare_windows_run_clean(project):
+    proj, env = project
+    py = sys.executable
+
+    def run(*cmd, timeout=400):
+        return subprocess.run([py, *cmd], cwd=proj, env=env, capture_output=True, text=True, timeout=timeout)
+
+    assert run(str(KIT / "check_agent.py"), "wait-embedder").returncode == 0
+    burst = run(str(KIT / "burst.py"), "--n", "400", "--threads", "4")
+    assert burst.returncode == 0, burst.stdout[-2500:]
+    soak = run("-m", "driftwatch_llm", "run", "--", py, str(KIT / "soak.py"), "--minutes", "0.2", "--every", "0.2")
+    assert soak.returncode == 0, soak.stdout[-2500:] + soak.stderr[-1500:]
+    table = run(str(KIT / "compare_windows.py"))
+    assert table.returncode == 0, table.stdout + table.stderr
+    assert "SECRET" not in table.stdout

@@ -4,17 +4,17 @@ Scripts to test the DriftWatch agent on your own machine, end to end, with no AP
 
 ## Quick start
 
-```powershell
-cd D:\Work.ext\AIProjects\TestingDW
-t\Scripts\activate
+From a folder you have linked with `driftwatch init` (a scratch project is fine):
 
-# Until 0.2.0 is on PyPI, install it from the repo (you are on branch feat/plan-4-agent):
-pip install -e "D:\Work.ext\AIProjects\P2-DriftWatch[agent]"
-#   After 0.2.0 is released:  pip install --upgrade "driftwatch-llm[agent]"
-
-driftwatch --version                          # should say 0.2.0
-python agent_testkit\run_all.py --quick       # about 1-2 minutes after the model is downloaded
 ```
+pip install --upgrade "driftwatch-llm[agent]"
+driftwatch --version
+python path/to/agent_testkit/run_all.py --quick       # about 1-2 minutes after the model is downloaded
+```
+
+In this repository the kit lives in `examples/agent_testkit/`. With `DRIFTWATCH_AGENT_EMBEDDER=hash` it needs no
+model download at all (a tiny test embedder; the drift margin is relaxed automatically). CI runs it that way:
+`tests/test_agent_testkit.py`.
 
 The first run downloads the embedding model (about 90 MB), so it can take a few minutes. On later runs it is quick.
 The last line should be `All good. The agent is monitoring correctly on this machine.`
@@ -34,6 +34,17 @@ The last line should be `All good. The agent is monitoring correctly on this mac
 
 `INFO` lines are not failures. "not logged in: events wait in the local outbox" is expected until you run
 `driftwatch login`; after that, the queued events are sent to your project and you can watch the chart on the website.
+
+## More scenarios
+
+| Script | What it proves |
+|---|---|
+| `offline.py` | cloud down -> events queue; a rejected key parks the project; restart -> every event arrives exactly once (uses `fake_ingest_server.py`) |
+| `burst.py --n 2000` | a flood of responses is all answered, nothing vanishes silently, the agent stays responsive |
+| `soak.py --minutes 30` | steady load for a long time: flat memory, one agent process, no drops (run via `driftwatch run --`) |
+| `compare_windows.py` | prints the drift values over time as a table with bars |
+| `fake_ingest_server.py` | a stand-in for the cloud on your machine, with modes down / error / slow / unauth / throttle |
+| `CHECKLIST.md` | what to try by hand on a real machine before a release (sleep/wake, VPN, antivirus, a second user...) |
 
 ## Files
 
