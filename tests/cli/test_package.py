@@ -93,3 +93,31 @@ def test_the_capture_and_hook_modules_need_only_the_standard_library():
     )
     r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
+
+
+def test_a_built_dashboard_is_shipped_in_the_wheel_even_though_it_is_git_ignored(tmp_path):
+    static = Path(__file__).resolve().parents[2] / "driftwatch_llm" / "dashboard_static"
+    existed = static.exists()
+    static.mkdir(exist_ok=True)
+    marker = static / "index.html"
+    kept = marker.read_bytes() if marker.exists() else None
+    marker.write_text("<html>dashboard</html>", encoding="utf-8")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "--no-build-isolation", "-q", "-w", str(tmp_path)],
+            check=True, cwd=Path(__file__).resolve().parents[2],
+        )
+        names = zipfile.ZipFile(next(tmp_path.glob("driftwatch_llm-*.whl"))).namelist()
+        assert "driftwatch_llm/dashboard_static/index.html" in names
+    finally:
+        if kept is None:
+            marker.unlink()
+            if not existed:
+                static.rmdir()
+        else:
+            marker.write_bytes(kept)
+
+
+def test_the_release_workflow_builds_the_dashboard_before_the_wheel():
+    text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-cli.yml").read_text(encoding="utf-8")
+    assert text.index("npm run build:local") < text.index("python -m build")

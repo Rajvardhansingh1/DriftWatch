@@ -39,7 +39,7 @@ export const SIGNALS = [
 ];
 
 export const HOW_TO_STEPS: { name: string; command: string; text: string; needs: Feature[] }[] = [
-  { name: "Install", command: "pip install driftwatch-llm", text: "Install the package into the same Python environment as your app.", needs: ["cli"] },
+  { name: "Install", command: 'pip install "driftwatch-llm[agent]"', text: "Install the package into the same Python environment as your app. The [agent] part adds what is needed to compute scores on your machine.", needs: ["cli"] },
   { name: "Link your project", command: "driftwatch init", text: "Sign in through the browser and link this folder to a DriftWatch project.", needs: ["cli"] },
   { name: "Open the dashboard", command: "driftwatch dashboard", text: "See live scores on your machine, or log in on the website to see the same data.", needs: ["cli"] },
 ];
@@ -59,7 +59,7 @@ export const KEYS: { title: string; text: string; needs?: Feature[] }[] = [
 // features are listed in NEXT_PUBLIC_FEATURES; then it leaves that section and
 // the matching section above (how-to, modes, keys) starts rendering instead.
 export const ROADMAP: { title: string; text: string; needs: Feature[] }[] = [
-  { title: "Local agent and CLI", text: "Run pip install driftwatch-llm and driftwatch init, and a small agent watches your app whenever it runs.", needs: ["cli"] },
+  { title: "Local agent and CLI", text: "Run pip install driftwatch-llm[agent] and driftwatch init, and a small agent watches your app whenever it runs.", needs: ["cli"] },
   { title: "Local and web dashboards in sync", text: "driftwatch dashboard on your machine, and the same live charts on this site after you log in.", needs: ["cli"] },
   { title: "Free allowance and your own keys", text: "Try it on our key with a small limit, then switch to your own provider key whenever you like.", needs: ["freeKey"] },
   { title: "Connect a model from the web", text: "Add a model from your dashboard and DriftWatch runs scheduled checks against it, with nothing to install.", needs: ["cloudConnect"] },
@@ -84,7 +84,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "How do I monitor my own LLM app with DriftWatch?",
     answer:
-      "Install the package with pip install driftwatch-llm, then run driftwatch init inside your project folder. It signs you in through the browser, creates a project and stores its key in your system keychain. From then on, a small background agent starts whenever your Python app runs. Run driftwatch dashboard to see it.",
+      "Install the package with pip install driftwatch-llm[agent], then run driftwatch init inside your project folder. It signs you in through the browser, creates a project and stores its key in your system keychain. From then on, a small background agent starts whenever your Python app runs. Run driftwatch dashboard to see it.",
     needs: ["cli"],
   },
   {
@@ -92,6 +92,12 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
     answer:
       "Yes. Every score the local agent computes syncs to your DriftWatch account, so the same charts appear on the website after you log in. If you would rather skip the local install entirely, connect your model from the web dashboard and DriftWatch runs its scheduled checks against it from the cloud.",
     needs: ["cli", "cloudConnect"],
+  },
+  {
+    question: "Which signals does the local agent measure today?",
+    answer:
+      "One: embedding drift, meaning how far recent responses have moved from a baseline of your app's first 200. It is computed on your machine and works with the OpenAI, Anthropic, Groq and Google GenAI Python SDKs, streaming included. The other signals need extra model calls and keys, and embedding drift alone raises no alerts yet.",
+    needs: ["cli"],
   },
   {
     question: "Who pays for the LLM calls DriftWatch makes?",
@@ -118,7 +124,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "What can I do with a DriftWatch account today?",
     answer:
-      "An account lets you create projects, make API keys and send events to a project with a plain HTTP call. Your scores update live on your dashboard. You can export your data or delete your account yourself in Settings. The local agent and command line are still to come, and the live demo needs no account.",
+      "An account lets you create projects, make API keys and send events to a project with a plain HTTP call. Your scores update live on your dashboard. You can export your data or delete your account yourself in Settings. The live demo needs no account.",
   },
   {
     question: "What are the limits of DriftWatch?",

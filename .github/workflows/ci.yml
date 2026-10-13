@@ -69,6 +69,8 @@ jobs:
       - run: npm run build
         env:
           NEXT_PUBLIC_MONITOR_API_URL: http://localhost:8000
+      # The local dashboard (shipped inside the CLI package) must keep building from the shared components.
+      - run: npm run build:local
 
   secrets:
     runs-on: ubuntu-latest

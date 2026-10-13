@@ -1,5 +1,7 @@
 "use client";
 
+// React import: the tsx test runner uses the classic JSX transform.
+import React from "react";
 import {
   CartesianGrid,
   Line,
