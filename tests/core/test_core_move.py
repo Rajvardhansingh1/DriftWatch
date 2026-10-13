@@ -105,3 +105,14 @@ def test_make_embedder_passes_local_files_only_only_when_asked(monkeypatch):
     embedding.make_embedder("onnx")
     embedding.make_embedder("onnx", local_only=True)
     assert seen == [{}, {"local_files_only": True}]  # the server's behaviour is unchanged
+
+
+def test_hash_embedder_is_deterministic_normalised_and_separates_topics():
+    import numpy as np
+
+    emb = embedding.make_embedder("hash")
+    a1, a2, b = emb.encode(["Your invoice renews monthly on the plan", "Your invoice renews monthly on the plan", "Roast the carrots with salt in the oven"])
+    assert a1.shape == (256,) and np.allclose(a1, a2) and abs(np.linalg.norm(a1) - 1.0) < 1e-5
+    same = emb.encode(["The invoice for your plan renews monthly"])[0]
+    assert float(a1 @ same) > float(a1 @ b) + 0.2  # same topic is closer than a different one
+    assert np.all(np.isfinite(emb.encode([""])))  # an empty text still gives a valid vector

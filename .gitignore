@@ -92,3 +92,5 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+examples/agent_testkit/.phases.json

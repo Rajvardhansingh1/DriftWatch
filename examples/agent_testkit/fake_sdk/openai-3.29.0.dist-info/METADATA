@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: openai
+Version: 3.29.0
+Summary: FAKE openai SDK used only by the DriftWatch agent testkit

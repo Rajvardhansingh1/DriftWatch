@@ -1,0 +1,49 @@
+"""The agent test kit (examples/agent_testkit) runs green against the real agent, with the hash embedder.
+
+This is the same sequence people run by hand, so the kit cannot rot: if the agent's behaviour changes, this fails."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from driftwatch_llm.project import ensure_gitignore, write_config
+from driftwatch_llm.trust import TrustStore
+
+REPO = Path(__file__).resolve().parents[1]
+KIT = REPO / "examples" / "agent_testkit"
+PID = "11111111-2222-4333-8444-555555555555"
+
+
+@pytest.fixture
+def project(tmp_path):
+    home = tmp_path / "home"
+    proj = tmp_path / "project"
+    home.mkdir()
+    proj.mkdir()
+    write_config(proj, PID)
+    ensure_gitignore(proj)
+    TrustStore(home=home).trust(proj, PID)
+    env = {
+        **os.environ,
+        "DRIFTWATCH_HOME": str(home),
+        "DRIFTWATCH_AGENT_EMBEDDER": "hash",
+        "PYTHONPATH": str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+        "DRIFTWATCH_AGENT_LINGER": "5",
+    }
+    env.pop("DRIFTWATCH_API_KEY", None)
+    yield proj, env
+    subprocess.run([sys.executable, "-m", "driftwatch_llm", "agent", "stop"], cwd=proj, env=env, timeout=30, capture_output=True)
+
+
+def test_the_kit_passes_end_to_end(project):
+    proj, env = project
+    r = subprocess.run(
+        [sys.executable, str(KIT / "run_all.py"), "--quick"],
+        cwd=proj, env=env, capture_output=True, text=True, timeout=600,
+    )
+    tail = "\n".join(r.stdout.splitlines()[-40:])
+    assert r.returncode == 0, f"kit failed:\n{tail}\n{r.stderr[-2000:]}"
+    assert "All good" in r.stdout

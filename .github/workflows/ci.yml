@@ -25,6 +25,30 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: pytest -q
 
+  # The local agent uses OS-specific pieces (named pipes / unix sockets, file locks, process spawning), so its tests
+  # run on all three systems. macOS runs only on pushes to main (it is the slowest runner).
+  agent-tests:
+    name: agent (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest","windows-latest"]') }}
+    env:
+      DRIFTWATCH_FORCE_SIMULATED: "true"
+      DRIFTWATCH_AGENT_EMBEDDER: hash
+      GROQ_API_KEY: ""
+      GOOGLE_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      # No torch here: the agent tests use fake embedders, so the light set is enough and fast on every system.
+      - run: pip install pytest pytest-asyncio numpy httpx typer keyring platformdirs pyyaml hatchling build fastapi pydantic pydantic-settings sqlalchemy apscheduler slowapi groq google-generativeai python-dotenv "pyjwt[crypto]" anyio
+      - run: python -m pytest tests/agent tests/capture tests/core tests/cli tests/test_agent_testkit.py -q -p no:cacheprovider
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
