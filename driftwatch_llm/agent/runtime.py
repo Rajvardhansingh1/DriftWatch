@@ -24,6 +24,7 @@ from driftwatch_llm.secrets import SecretStore
 
 ALIVE_WINDOW = 15.0  # a client counts as connected for this long after its last message
 PRUNE_EVERY = 3600.0
+LOAD_TIMEOUT = 900.0  # a model still not loaded after this long is reported as failed (it may yet finish)
 CAPTURE_QUEUE = 1000  # responses waiting to be scored; the oldest are dropped (and counted) beyond this
 
 
@@ -37,6 +38,11 @@ def _default_embedder() -> Any:
         return embedding.make_embedder(kind, local_only=True)  # a cached model loads without any network check
     except Exception:  # noqa: BLE001 - not cached yet (or unreadable): fall back to the normal, downloading load
         return embedding.make_embedder(kind)
+
+
+def _embedder_label() -> str:
+    """What events say produced them: the test embedder must never be mistaken for the real model."""
+    return "hash" if os.environ.get("DRIFTWATCH_AGENT_EMBEDDER") == "hash" else "minilm-l6-v2"
 
 
 class AgentRuntime:
@@ -53,6 +59,8 @@ class AgentRuntime:
         linger: float = 30.0,
         sync_interval: float = 10.0,
         capture_queue: int = CAPTURE_QUEUE,
+        load_timeout: float = LOAD_TIMEOUT,
+        embedder_name: str | None = None,
     ) -> None:
         self._home = Path(home) if home is not None else paths.config_dir()
         self._clock = clock
@@ -61,8 +69,10 @@ class AgentRuntime:
         self._factory = embedder_factory
         self._store = AgentStore(ipc.agent_dir(self._home) / "agent.sqlite3", clock=clock)
         self._engine = Engine(
-            self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval
+            self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval,
+            embedder_name=embedder_name or _embedder_label(),
         )
+        self._load_timeout = load_timeout
         self._sync = SyncWorker(
             self._store,
             api if api is not None else Api(resolve(dev=os.environ.get("DRIFTWATCH_DEV") == "1")),
@@ -135,6 +145,15 @@ class AgentRuntime:
             return {"ok": True}
         return {"ok": True, "status": self._status()}
 
+    def _embedder_view(self, now: float) -> str:
+        if (
+            self._embedder_state == "loading"
+            and self._embedder_started is not None
+            and now - self._embedder_started > self._load_timeout
+        ):
+            return "failed: timeout"
+        return self._embedder_state
+
     def _status(self) -> dict[str, Any]:
         now = self._clock()
         with self._clients_lock:
@@ -157,7 +176,7 @@ class AgentRuntime:
             "protocol": ipc.PROTOCOL_VERSION,
             "pid": os.getpid(),
             "uptime_seconds": round(now - self._started, 1),
-            "embedder": self._embedder_state,
+            "embedder": self._embedder_view(now),
             "embedder_loading_seconds": (
                 round(now - self._embedder_started, 1)
                 if self._embedder_state == "loading" and self._embedder_started is not None

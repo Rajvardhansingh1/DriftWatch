@@ -342,3 +342,10 @@ def test_the_endpoint_name_cannot_be_predicted_without_the_key(tmp_path):
     (home / "agent" / "agent.key").unlink()  # a new key means a new, equally unpredictable, name
     ipc.load_or_create_authkey(home)
     assert ipc.address_for(home) != address
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="AF_UNIX paths are a POSIX limit")
+def test_the_socket_path_stays_under_the_af_unix_limit_even_with_a_long_temp_dir(home, monkeypatch):
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.setattr(ipc.tempfile, "gettempdir", lambda: "/var/folders/" + "x" * 120 + "/T")
+    assert len(os.fsencode(ipc.address_for(home))) <= 100  # sun_path holds 104 bytes on macOS, 108 on Linux

@@ -69,6 +69,7 @@ class Engine:
         min_interval: float = MIN_INTERVAL_SECONDS,
         max_chars: int = MAX_CHARS,
         backlog_size: int = BACKLOG_SIZE,
+        embedder_name: str = EMBEDDER_NAME,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -80,6 +81,7 @@ class Engine:
         self._min_interval = min_interval
         self._max_chars = max_chars
         self._lock = threading.RLock()
+        self._embedder_name = embedder_name
         self._projects: dict[str, _Project] = {}
         # Responses that arrive while the model is still loading wait here, in memory only (never on disk), and are
         # processed in order once it is ready. Bounded: the oldest are dropped (and counted) beyond backlog_size.
@@ -220,7 +222,7 @@ class Engine:
                     # Early values (small window) are noisier: measured floor 0.06 mean / 0.12-0.18 worst at
                     # windows of 5-10 versus 0.03 / 0.08 at 20 (scripts/measure_embedding_only.py).
                     "window_full": len(proj.window) >= self._window_size,
-                    "embedder": EMBEDDER_NAME,
+                    "embedder": self._embedder_name,
                     "models": models,
                     "agent_version": __version__,
                 },

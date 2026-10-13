@@ -266,3 +266,25 @@ def test_a_burst_over_ipc_is_answered_fast_and_fully_processed(tmp_path):
         client.close()
     finally:
         rt.shutdown()
+
+
+def test_a_model_that_never_finishes_loading_is_reported_as_a_timeout_and_may_still_become_ready(tmp_path):
+    clock = Clock()
+    rt = make(tmp_path, clock, factory=lambda: ThemeEmbedder(), load_timeout=900.0)
+    rt._embedder_started = clock()  # as if the loader thread had begun and is stuck downloading
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "loading"
+    clock.now += 901
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "failed: timeout"
+    wait_loaded(rt)  # the download finishes after all
+    assert rt.handle({"type": "status"})["status"]["embedder"] == "ready"
+
+
+def test_events_say_which_embedder_made_them(tmp_path):
+    rt = make(tmp_path, factory=lambda: ThemeEmbedder(), embedder_name="hash")
+    wait_loaded(rt)
+    for i in range(10):
+        capture(rt, f"A: {i}")
+    for i in range(5):
+        capture(rt, f"B: {i}")
+    rows = rt._store.recent_signals(P1, "embedding_drift", 5)
+    assert rows and rows[0]["meta"]["embedder"] == "hash"

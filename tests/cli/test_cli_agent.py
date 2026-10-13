@@ -402,3 +402,10 @@ def test_doctor_never_prints_a_key(env, monkeypatch):
     healthy(env, monkeypatch)
     r = env.run("doctor")  # Env.run asserts that no key appears
     assert r.exit_code == 0
+
+
+def test_status_says_in_a_plain_sentence_when_responses_were_dropped(env):
+    st = dict(STATUS, clients=[dict(STATUS["clients"][0], stats={"captured": 40, "dropped": 7})])
+    env.agent.replies["status"] = {"ok": True, "status": st}
+    r = env.run("agent", "status")
+    assert "7 responses were not captured" in r.output

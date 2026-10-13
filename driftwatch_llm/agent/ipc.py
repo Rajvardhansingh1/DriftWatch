@@ -38,6 +38,7 @@ MAX_MESSAGE = 64 * 1024
 HANDSHAKE_TIMEOUT = 5.0
 IDLE_TIMEOUT = 300.0
 MAX_CLIENTS = 64
+MAX_SOCKET_PATH = 100
 PROTOCOL_VERSION = 2  # bumps whenever messages change in a way an older agent or client cannot follow
 _MAGIC = b"DW2"
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
@@ -78,7 +79,10 @@ def address_for(home: Path | str | None = None) -> str:
     digest = _home_hash(home)
     if sys.platform == "win32":
         return rf"\\.\pipe\driftwatch-{digest}"
-    return str(_socket_dir() / f"{digest}.sock")
+    path = str(_socket_dir() / f"{digest}.sock")
+    if len(os.fsencode(path)) > MAX_SOCKET_PATH:  # AF_UNIX paths hold 104 bytes (macOS) or 108 (Linux)
+        path = str(Path("/tmp") / f"driftwatch-{os.getuid()}" / f"{digest}.sock")
+    return path
 
 
 def _socket_dir() -> Path:

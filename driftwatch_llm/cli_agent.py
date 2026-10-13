@@ -146,6 +146,8 @@ def agent_status(ctx: typer.Context) -> None:
         sdks = ", ".join(f"{name} {info['version']} ({info['status']})" for name, info in sorted(c["sdks"].items()))
         typer.echo(f"  pid {c['pid']}, python {c['python']}: {sdks or 'no SDKs seen yet'}")
         stats = c.get("stats") or {}
+        if stats.get("dropped"):
+            typer.echo(f"    {stats['dropped']} responses were not captured: the app made calls faster than the agent could take them.")
         if stats:
             typer.echo(
                 f"    captured {stats.get('captured', 0)}, dropped {stats.get('dropped', 0)}, "
