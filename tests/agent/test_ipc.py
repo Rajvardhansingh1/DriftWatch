@@ -324,10 +324,15 @@ def test_the_client_refuses_a_socket_directory_that_others_can_write_to(home, tm
 
 @pytest.mark.skipif(not POSIX, reason="POSIX socket directory location")
 def test_the_socket_prefers_the_per_user_runtime_directory(tmp_path, monkeypatch):
-    runtime = tmp_path / "run"
-    runtime.mkdir()
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
-    assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
+    import shutil
+    import tempfile
+
+    runtime = Path(tempfile.mkdtemp(prefix="dwrt"))  # short, like /run/user/1000 (a long one falls back to /tmp)
+    try:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+        assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))
+    finally:
+        shutil.rmtree(runtime, ignore_errors=True)
     monkeypatch.delenv("XDG_RUNTIME_DIR")
     assert "/driftwatch-" in ipc.address_for(tmp_path / "h")
 
