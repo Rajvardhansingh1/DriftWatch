@@ -167,6 +167,9 @@ def agent_status(ctx: typer.Context) -> None:
     typer.echo(f"sync: sent {sync['sent_total']}, last success {last}, quarantined {sync['quarantined']}")
     if sync.get("last_error"):
         typer.echo(f"  last error: {sync['last_error']}")
+    judge = st.get("judge")
+    if judge and judge.get("enabled"):
+        typer.echo(f"judge: {judge['state']} ({judge['scored_today']} of {judge['max_per_day']} graded today)")
     counters = st["counters"]
     typer.echo("counters: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in sorted(counters.items())))
 
@@ -405,6 +408,9 @@ def doctor(ctx: typer.Context) -> None:
                 bad(f"project {pid} is waiting for a key", "driftwatch login")
             elif info.get("parked") == "auth_failed":
                 bad(f"project {pid}: the key was rejected", "driftwatch agent rotate-key")
+        judge = st.get("judge")
+        if judge and judge.get("enabled") and judge["state"].startswith("parked"):
+            bad(f"the judge is {judge['state']}", "see `driftwatch judge status`")
         err = st["sync"].get("last_error")
         if err:
             bad(f"the last sync failed: {err}", "check your internet connection; events stay queued and are sent later")

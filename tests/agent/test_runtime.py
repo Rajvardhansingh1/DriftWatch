@@ -316,3 +316,48 @@ def test_the_dashboard_message_starts_the_server_once_and_it_reads_the_agents_nu
         assert "text" not in json.dumps(status).lower().replace("context", "")
     finally:
         rt.shutdown()
+
+
+def test_the_judge_is_off_by_default_and_status_says_so(tmp_path):
+    rt = make(tmp_path)
+    wait_loaded(rt)
+    for i in range(12):
+        capture(rt, f"A: {i}")
+    st = rt.handle({"type": "status"})["status"]
+    assert st["judge"]["state"] == "off" and st["judge"]["queued"] == 0
+    assert rt.handle({"type": "status"})["status"]["counters"].get("judge_scored", 0) == 0
+
+
+def test_an_enabled_judge_samples_redacted_text_through_the_relay_and_feeds_the_combined_score(tmp_path):
+    from driftwatch_llm.judge_settings import JudgeSettings, write_settings
+
+    sent = []
+
+    def relay(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"score": 0.3, "remaining": 40})
+
+    home = tmp_path / "home"
+    home.mkdir()
+    write_settings(home, JudgeSettings(enabled=True, credential="free", sample_every=1, max_per_day=40))
+    rt = make(tmp_path, judge_transport=httpx.MockTransport(relay))
+    wait_loaded(rt)
+    for i in range(10):
+        capture(rt, f"A: {i}")  # the baseline
+    for i in range(5):
+        capture(rt, f"B: mail me at jane@example.com {i}")
+    while rt._judge.process_one() == "scored":
+        pass
+    # the 10th baseline response froze the baseline and was itself sampled, then the five B responses
+    assert len(sent) == 6 and all("jane@example.com" not in m["text"] for m in sent)
+    assert sum("[email]" in m["text"] for m in sent) == 5
+    st = rt.handle({"type": "status"})["status"]
+    assert st["judge"]["scored_today"] == 6 and st["judge"]["allowance"]["remaining"] == 40
+    assert st["counters"]["judge_scored"] == 6
+    judge_rows = rt._store.recent_signals(P1, "judge_trend", 5)
+    assert len(judge_rows) == 1 and abs(judge_rows[0]["value"] - 0.3) < 1e-9
+    for i in range(5):  # the next drift value now folds the judge in
+        rt._clock.now += 20
+        capture(rt, f"B: again {i}")
+    modes = {r["meta"]["mode"] for r in rt._store.recent_signals(P1, "combined_score", 10)}
+    assert "embedding_judge" in modes

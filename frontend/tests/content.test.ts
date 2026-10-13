@@ -49,7 +49,12 @@ test("structured data only describes live features", () => {
 
   const cli = buildLd(enabledFeatures("cli"), "https://example.test");
   const howTo = cli.find((d: any) => d["@type"] === "HowTo") as any;
-  assert.deepEqual(howTo.step.map((s: any) => s.name), HOW_TO_STEPS.map((s) => s.name));
+  const liveNames = (raw: string) => HOW_TO_STEPS.filter((s) => isLive(s, enabledFeatures(raw))).map((s) => s.name);
+  assert.deepEqual(howTo.step.map((s: any) => s.name), liveNames("cli"));
+  assert.ok(!howTo.step.some((s: any) => /judge/i.test(s.name)), "the optional judge step waits for the free allowance");
+  const withFree = buildLd(enabledFeatures("cli,freeKey"), "https://example.test").find((d: any) => d["@type"] === "HowTo") as any;
+  assert.deepEqual(withFree.step.map((s: any) => s.name), liveNames("cli,freeKey"));
+  assert.ok(withFree.step.length === howTo.step.length + 1);
 });
 
 test("Plan 1 content needs no later feature; later scope lives only in ROADMAP", () => {

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ProjectLive } from "@/components/console/ProjectLive";
-import { getProject, loadSeries } from "@/lib/console/data";
+import { AllowanceNote } from "@/components/console/AllowanceNote";
+import { getProject, loadQuota, loadSeries } from "@/lib/console/data";
+import { enabledFeatures } from "@/lib/features";
 import { isUuid, parseRange, RANGES } from "@/lib/console/validate";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -23,6 +25,7 @@ export default async function ProjectPage({
   const project = await getProject(supabase, projectId);
   if (!project) notFound();
   const initial = await loadSeries(supabase, projectId, range);
+  const quota = enabledFeatures().has("freeKey") ? await loadQuota(supabase) : null;
   return (
     <main>
       <p className="text-xs text-dim"><Link href="/dashboard" className="hover:text-text">Projects</Link> / {project.name}</p>
@@ -44,6 +47,7 @@ export default async function ProjectPage({
           <Link href={`/dashboard/${projectId}/keys`} className="rounded border border-line px-3 py-1.5 hover:border-dim">API keys</Link>
         </div>
       </div>
+      {quota && <AllowanceNote quota={quota} />}
       <div className="mt-6">
         <ProjectLive projectId={projectId} range={range} initial={initial} />
       </div>

@@ -70,6 +70,7 @@ class Engine:
         max_chars: int = MAX_CHARS,
         backlog_size: int = BACKLOG_SIZE,
         embedder_name: str = EMBEDDER_NAME,
+        extra_signals: Callable[[str], dict[str, float]] | None = None,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -82,6 +83,7 @@ class Engine:
         self._max_chars = max_chars
         self._lock = threading.RLock()
         self._embedder_name = embedder_name
+        self._extra_signals = extra_signals  # other signals measured for a project (the judge), folded into the combined score
         self._projects: dict[str, _Project] = {}
         # Responses that arrive while the model is still loading wait here, in memory only (never on disk), and are
         # processed in order once it is ready. Bounded: the oldest are dropped (and counted) beyond backlog_size.
@@ -209,7 +211,12 @@ class Engine:
     def _emit(self, project_id: str, proj: _Project, now: float) -> list[dict[str, Any]]:
         assert proj.baseline is not None
         score = embedding_drift_score_fast(proj.baseline, np.stack(list(proj.window)))
-        combined = combine_signals({"embedding_drift": score}, ScoringConfig())
+        present = {"embedding_drift": score}
+        try:
+            present.update({k: float(v) for k, v in (self._extra_signals(project_id) if self._extra_signals else {}).items()})
+        except Exception:  # noqa: BLE001 - a broken side signal must not stop drift values
+            pass
+        combined = combine_signals(present, ScoringConfig())
         models = dict(Counter(proj.models).most_common(5))
         stamp = datetime.fromtimestamp(now, timezone.utc).isoformat()
         specs = [
@@ -231,8 +238,8 @@ class Engine:
                 "combined_score",
                 combined.score,
                 {
-                    "mode": "embedding_only",
-                    "signals": ["embedding_drift"],
+                    "mode": "embedding_only" if len(present) == 1 else "embedding_judge",
+                    "signals": list(present),
                     "triggering_signals": combined.triggering_signals,
                     "agent_version": __version__,
                 },
@@ -240,23 +247,39 @@ class Engine:
         ]
         events: list[dict[str, Any]] = []
         for signal, value, meta in specs:
-            event = {
-                "schema_version": 1,
-                "event_id": str(uuid.uuid4()),
-                "occurred_at": stamp,
-                "source": "agent",
-                "signal": signal,
-                "value": float(value),
-                "meta": meta,
-                "content_capture": False,
-            }
-            try:
-                validate_event(event)
-            except IngestionError:
-                self._store.bump("invalid_events")
-                continue
-            self._store.add_signal(project_id, signal, float(value), meta, ts=now)
-            self._store.enqueue(project_id, event)
-            events.append(event)
+            event = self._store_event(project_id, signal, value, meta, stamp, now)
+            if event is not None:
+                events.append(event)
         self._store.bump("emitted", len(events))
         return events
+
+    def _store_event(
+        self, project_id: str, signal: str, value: float, meta: dict[str, Any], stamp: str, now: float
+    ) -> dict[str, Any] | None:
+        event = {
+            "schema_version": 1,
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": stamp,
+            "source": "agent",
+            "signal": signal,
+            "value": float(value),
+            "meta": meta,
+            "content_capture": False,
+        }
+        try:
+            validate_event(event)
+        except IngestionError:
+            self._store.bump("invalid_events")
+            return None
+        self._store.add_signal(project_id, signal, float(value), meta, ts=now)
+        self._store.enqueue(project_id, event)
+        return event
+
+    def emit_signal(self, project_id: str, signal: str, value: float, meta: dict[str, Any]) -> dict[str, Any] | None:
+        """Store and queue one signal measured outside the engine (the judge). None if the contract refuses it."""
+        now = self._clock()
+        stamp = datetime.fromtimestamp(now, timezone.utc).isoformat()
+        event = self._store_event(project_id, signal, value, {**meta, "agent_version": __version__}, stamp, now)
+        if event is not None:
+            self._store.bump("emitted")
+        return event

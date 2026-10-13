@@ -57,6 +57,7 @@ class Services:
     # Local agent and autostart (None means the real thing; tests inject fakes)
     agent_client: Callable[[], Any] | None = None
     ensure_agent: Callable[[], bool] | None = None
+    provider_keys: Any | None = None  # own-provider keys for the judge (None means the real keychain; tests inject)
     install_hook: Callable[[], Path] | None = None
     remove_hook: Callable[[], list[Path]] | None = None
     hook_installed: Callable[[], Path | None] | None = None
@@ -364,3 +365,6 @@ from driftwatch_llm.cli_agent import (  # noqa: E402
     hook_installed,
     offer_autostart,
 )
+
+# Registers `key` and `judge` (own provider key, opt-in grading).
+import driftwatch_llm.cli_judge  # noqa: E402,F401

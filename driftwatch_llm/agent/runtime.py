@@ -18,8 +18,10 @@ from driftwatch_llm.agent import ipc
 from driftwatch_llm.agent.engine import DEFAULT_BASELINE_SIZE, MIN_BASELINE, MIN_INTERVAL_SECONDS, Engine
 from driftwatch_llm.agent.store import AgentStore
 from driftwatch_llm.agent.sync import SyncWorker
+from driftwatch_llm.agent.judge import JudgeWorker
 from driftwatch_llm.api import Api
 from driftwatch_llm.endpoints import resolve
+from driftwatch_llm.providerkeys import ProviderKeyStore
 from driftwatch_llm.secrets import SecretStore
 
 ALIVE_WINDOW = 15.0  # a client counts as connected for this long after its last message
@@ -61,6 +63,7 @@ class AgentRuntime:
         capture_queue: int = CAPTURE_QUEUE,
         load_timeout: float = LOAD_TIMEOUT,
         embedder_name: str | None = None,
+        judge_transport: Any | None = None,
     ) -> None:
         self._home = Path(home) if home is not None else paths.config_dir()
         self._clock = clock
@@ -71,6 +74,7 @@ class AgentRuntime:
         self._engine = Engine(
             self._store, None, clock=clock, baseline_size=baseline_size, min_baseline=min_baseline, min_interval=min_interval,
             embedder_name=embedder_name or _embedder_label(),
+            extra_signals=lambda project_id: self._judge.latest(project_id),
         )
         self._load_timeout = load_timeout
         self._sync = SyncWorker(
@@ -78,6 +82,16 @@ class AgentRuntime:
             api if api is not None else Api(resolve(dev=os.environ.get("DRIFTWATCH_DEV") == "1")),
             secrets if secrets is not None else SecretStore(home=self._home),
             clock=clock,
+        )
+        self._judge = JudgeWorker(
+            self._store,
+            self._engine,
+            home=self._home,
+            secrets=secrets if secrets is not None else SecretStore(home=self._home),
+            provider_keys=ProviderKeyStore(home=self._home),
+            endpoints=resolve(dev=os.environ.get("DRIFTWATCH_DEV") == "1"),
+            clock=clock,
+            transport=judge_transport,
         )
         self._server = ipc.IpcServer(self._home, self.handle)
         self._started = clock()
@@ -204,6 +218,7 @@ class AgentRuntime:
             "projects": projects,
             "sync": self._sync.status(),
             "queued": len(self._queue),
+            "judge": self._judge.status(),
             "counters": self._store.counters(),
         }
 
@@ -217,6 +232,7 @@ class AgentRuntime:
             try:
                 self._engine.capture(project_id, text, provider, model)
                 self._store.bump("captured")
+                self._judge.offer(project_id, text, model)  # off unless the user opted in; masks and samples
             except Exception:  # noqa: BLE001 - one bad response must not stop the worker
                 self._store.bump("capture_errors")
 
@@ -225,6 +241,16 @@ class AgentRuntime:
             self._work.wait(0.5)
             self._work.clear()
             self.drain()
+
+    def _judge_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                outcome = self._judge.process_one()
+            except Exception:  # noqa: BLE001 - the judge must never take the agent down
+                self._store.bump("judge_errors")
+                outcome = None
+            if outcome in (None, "waiting"):
+                self._stop.wait(1.0)
 
     # -- lifetime -----------------------------------------------------------------------
     def tick(self) -> bool:
@@ -241,6 +267,7 @@ class AgentRuntime:
             self._spawn(self.load_embedder_now, "dw-embedder")
         self._spawn(self._sync_loop, "dw-sync")
         self._spawn(self._worker, "dw-worker")
+        self._spawn(self._judge_loop, "dw-judge")
 
     def _spawn(self, target: Callable[[], None], name: str) -> None:
         t = threading.Thread(target=target, name=name, daemon=True)

@@ -25,12 +25,13 @@ export function buildLd(on: Set<Feature>, siteUrl: string): object[] {
       })),
     },
   ];
-  if (HOW_TO_STEPS.every((s) => isLive(s, on))) {
+  const liveSteps = HOW_TO_STEPS.filter((s) => isLive(s, on)); // an optional later step appears only once it ships
+  if (liveSteps.length > 0) {
     ld.push({
       "@context": "https://schema.org",
       "@type": "HowTo",
       name: "Start monitoring an LLM app with DriftWatch",
-      step: HOW_TO_STEPS.map((s, i) => ({
+      step: liveSteps.map((s, i) => ({
         "@type": "HowToStep",
         position: i + 1,
         name: s.name,

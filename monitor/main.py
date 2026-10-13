@@ -25,6 +25,8 @@ from sqlalchemy import text
 from monitor import logging_redaction
 from monitor.admin.routes import router as admin_router
 from monitor.cloud.ingest_route import build_router as build_ingest_router
+from monitor.cloud.llm_proxy import GroqProvider, SupabaseQuota
+from monitor.cloud.llm_proxy import build_router as build_free_proxy_router
 from monitor.cloud.supabase_store import SupabaseSignalStore
 from monitor.config import settings
 from monitor.db.session import get_session, init_db
@@ -185,6 +187,14 @@ def create_app(
     if settings.supabase_url and settings.supabase_anon_key:
         app.include_router(
             build_ingest_router(SupabaseSignalStore(settings.supabase_url, settings.supabase_anon_key))
+        )
+        # The free allowance's relay: metered through the database with the public key, graded by its own provider key.
+        app.include_router(
+            build_free_proxy_router(
+                SupabaseQuota(settings.supabase_url, settings.supabase_anon_key, settings.free_proxy_relay_secret),
+                GroqProvider(settings.free_proxy_groq_key, settings.free_proxy_model) if settings.free_proxy_groq_key else None,
+                disabled=settings.disable_free_proxy or not settings.free_proxy_relay_secret,  # no secret: the database would refuse
+            )
         )
 
     @app.get("/api/quota")

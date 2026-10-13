@@ -35,8 +35,9 @@ export default function Privacy() {
           <li>A security log of actions such as creating or revoking a key and deleting your account. The deletion entry is stored without your identity. Earlier log entries keep a random identifier that no longer links to you after you delete your account.</li>
         </ul>
 
-        <h2 className={h2}>What we will store when the local agent ships</h2>
-        <p className={p}>The local agent is not available yet. When it ships, it will send us the scores it computes, with small metadata such as which signal and when. Raw prompts and responses will stay on your machine.</p>
+        <h2 className={h2}>The local agent</h2>
+        <p className={p}>The local agent (installed with pip) sends us only the scores it computes, with small metadata such as which signal, when, and which embedding model. Prompts are never read. The text of a response stays on your machine: it is held in memory long enough to compute a score and is never written to disk or sent to us.</p>
+        <p className={p}>The optional judge is off until you turn it on. When it is on, about one in 25 responses is redacted on your machine (emails, API keys, tokens and long numbers are masked, and the text is cut to 1500 characters) and sent for grading: to the model provider you chose, using your own key, or, if you use the free allowance, to our relay. The relay forwards it to a language-model provider (currently Groq), keeps nothing, and logs only a status code and a duration. We store a count of how many graded samples your account has used, never their content.</p>
 
         <h2 className={h2}>How long we will keep scores</h2>
         <p className={p}>Raw scores will be kept for 30 days, then rolled up into hourly summaries.</p>

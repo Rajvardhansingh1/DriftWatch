@@ -9,6 +9,9 @@ Target: monitor API on **Render** (native Python runtime, no Docker), dashboard 
 | Variable | Value |
 |---|---|
 | `GROQ_API_KEY`, `GOOGLE_API_KEY` | provider keys (optional; simulated client if unset) |
+| `FREE_PROXY_GROQ_KEY` | a **separate** Groq key for the free allowance's relay (`POST /v1/judge`). Unset = the route answers 503. Server-only; never in Vercel or the repo |
+| `FREE_PROXY_RELAY_SECRET` | a long random secret (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). Only the relay knows it; the database stores its sha256 and refuses metering calls without it. Set the hash once: `update private.quota_policies set relay_secret_hash = extensions.digest('<the secret>', 'sha256') where name = 'free';` |
+| `FREE_PROXY_MODEL`, `DISABLE_FREE_PROXY` | the model it grades with (default `qwen/qwen3.8-27b`, checked against the live Groq model list on 2026-10-13: model names change, so re-check it before launch) and the kill switch (`true` closes the route) |
 | `DRIFTWATCH_CORS_ORIGINS` | your Vercel origin, e.g. `https://driftwatch.vercel.app` (no trailing slash) |
 | `SUPABASE_URL` | `https://zaodlvgqowhdqobvvhpx.supabase.co` |
 | `SUPABASE_ANON_KEY` | Supabase publishable/anon key (Project Settings → API) |

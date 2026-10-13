@@ -21,6 +21,7 @@ class Endpoints:
     supabase_url: str
     publishable_key: str  # public by design: it only identifies the project to the API gateway
     web_origin: str
+    relay_url: str = "https://driftwatch-monitor.onrender.com"  # the free allowance's relay (Render)
 
 
 PINNED = Endpoints(
@@ -58,4 +59,5 @@ def resolve(dev: bool, env: Mapping[str, str] | None = None) -> Endpoints:
         supabase_url=pick("DRIFTWATCH_DEV_SUPABASE_URL", PINNED.supabase_url),
         publishable_key=pick("DRIFTWATCH_DEV_SUPABASE_KEY", PINNED.publishable_key, url=False),
         web_origin=pick("DRIFTWATCH_DEV_WEB_ORIGIN", PINNED.web_origin),
+        relay_url=pick("DRIFTWATCH_DEV_RELAY_URL", PINNED.relay_url),
     )

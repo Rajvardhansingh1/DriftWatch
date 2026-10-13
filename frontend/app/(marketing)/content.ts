@@ -42,6 +42,7 @@ export const HOW_TO_STEPS: { name: string; command: string; text: string; needs:
   { name: "Install", command: 'pip install "driftwatch-llm[agent]"', text: "Install the package into the same Python environment as your app. The [agent] part adds what is needed to compute scores on your machine.", needs: ["cli"] },
   { name: "Link your project", command: "driftwatch init", text: "Sign in through the browser and link this folder to a DriftWatch project.", needs: ["cli"] },
   { name: "Open the dashboard", command: "driftwatch dashboard", text: "See live scores on your machine, or log in on the website to see the same data.", needs: ["cli"] },
+  { name: "Optional: grade a sample", command: "driftwatch judge enable", text: "Turn on the judge to grade a small, redacted sample of your responses with the free allowance. It shows exactly what is sent before it starts.", needs: ["cli", "freeKey"] },
 ];
 
 export const MODES: { title: string; text: string; needs?: Feature[] }[] = [
@@ -100,6 +101,12 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
     needs: ["cli"],
   },
   {
+    question: "What does the free allowance send, and who sees it?",
+    answer:
+      "With the free allowance, a redacted sample of a response (emails, keys and numbers masked, cut to 1500 characters) goes to the DriftWatch relay, which asks a small language model to grade it and keeps nothing. It is off until you run driftwatch judge enable, and you get 50 graded samples before it stops.",
+    needs: ["freeKey"],
+  },
+  {
     question: "Who pays for the LLM calls DriftWatch makes?",
     answer:
       "Each account gets a small free allowance on our key, enough to try DriftWatch on a real app. When it runs out, add your own provider key and keep going on your own account with your provider. You can also bring your own key from the start and skip the allowance entirely if you would rather not use ours.",
@@ -108,7 +115,7 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
   {
     question: "Does DriftWatch send my prompts and responses to the cloud?",
     answer:
-      "Not by default. Text-based checks run on your machine, and only scores and a little metadata reach your account. The exception is the LLM judge: it sends a small sample of answers to the model provider you use, so that the judge model can grade them against its rubric.",
+      "Not by default. Scores are computed on your machine and only numbers reach your account. Prompts are never read. The one exception is the optional judge: once you turn it on, a small sample of responses, with emails and keys masked first, goes to the model provider you chose.",
     needs: ["cli"],
   },
   {

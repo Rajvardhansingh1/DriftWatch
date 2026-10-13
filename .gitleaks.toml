@@ -17,3 +17,9 @@ description = "Obviously fake project key used as a test fixture (dw_0123456789_
 condition = "AND"
 paths = ['''^tests/cli/''']
 regexes = ['''dw_0123456789_''']
+
+[[allowlists]]
+description = "A made-up JWT-shaped string: the redaction tests must prove a token-like value is masked. Not a credential."
+condition = "AND"
+paths = ['''^tests/core/test_redact\.py$''']
+regexes = ['''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dBjftJeZ4CVPmB92K27uhbUJU1p1r''']
