@@ -28,6 +28,8 @@ const env = {
   NEXT_PUBLIC_SITE_URL: WEB,
   NEXT_PUBLIC_MONITOR_API_URL: `http://${HOST}:8000`,
   NEXT_TELEMETRY_DISABLED: "1",
+  NEXT_PUBLIC_FEATURES: "cloudConnect", // the connect page is dark without it
+  CONNECT_PUBLIC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 };
 
 // Same derivation as supabase-js (`sb-${hostname.split(".")[0]}-auth-token`) and the
@@ -224,6 +226,39 @@ try {
     assert((await row.getByRole("button").count()) === 0, "revoke button still shown");
     await page.screenshot({ path: join(SHOTS, "keys-desktop.png"), fullPage: true });
     return "first click asks, second revokes";
+  });
+
+  await check("m1. connect page: last four, status, estimate, no secret anywhere", async () => {
+    state.connected_models.push({
+      project_id: DEMO_PROJECT_ID, provider: "groq", model: "some-model", last4: "wxyz", interval_minutes: 60, monthly_budget: 2000,
+      enabled: true, calls_this_month: 35, last_run_at: new Date(Date.now() - 20 * 60_000).toISOString(), last_error: null,
+    });
+    await page.goto(`${WEB}/dashboard/${DEMO_PROJECT_ID}/connect`);
+    await page.getByText("Running normally").waitFor({ timeout: 15_000 });
+    const text = await page.locator("main").innerText();
+    assert(text.includes("wxyz") && text.includes("35 of 2000 calls used"), "last four or budget use missing");
+    assert(/fixed questions, not your app/.test(text), "the honest limit is not on the page");
+    assert(/Usage estimate|calls a month/.test(text), "no usage estimate");
+    const html = await page.locator("main").innerHTML(); // not the whole document: the CSP nonce attribute is legitimate
+    assert(!/gsk_|ciphertext|ephemeral|secret/i.test(html.replace(/Usage estimate/g, "")), "secret material in the page");
+    assert((await page.locator('input[type="password"]').count()) === 1, "the key field is not a password field");
+    return "settings only; password field; estimate shown";
+  });
+
+  await check("m2. connect page: pause, then delete asks first and removes the connection", async () => {
+    await page.getByRole("button", { name: "Pause" }).click();
+    await page.getByText("Paused.").first().waitFor({ timeout: 10_000 });
+    assert(state.connected_models[0].enabled === false, "the pause did not reach the database");
+    let asked = "";
+    page.once("dialog", async (d) => {
+      asked = d.message();
+      await d.accept();
+    });
+    await page.getByRole("button", { name: "Delete key and connection" }).click();
+    await page.getByText("Deleted.").waitFor({ timeout: 10_000 });
+    assert(/Delete the connected model and its key/.test(asked), "no confirmation was asked");
+    assert(state.connected_models.length === 0, "the row is still there");
+    return "pause and confirmed delete both reach the database";
   });
 
   await check("i. bad and unknown project ids give 404", async () => {
