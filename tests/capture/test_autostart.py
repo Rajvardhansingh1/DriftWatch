@@ -311,3 +311,21 @@ def test_driftwatch_run_in_an_untrusted_folder_hooks_nothing(env, tmp_path):
     code = f"import sys; open(r'{out}', 'w').write(str(any(type(f).__name__ == '_Finder' for f in sys.meta_path)))"
     assert run_command([sys.executable, "-c", code], cwd=proj) == 0
     assert out.read_text() == "False"
+
+
+def test_run_resolves_a_bare_command_on_path_like_a_shell_does(tmp_path, monkeypatch):
+    """On Windows, subprocess looks in the running executable's own folder first, which for a venv is the BASE
+    Python's folder: `python` could silently be a Python without the package. Resolve it on PATH instead."""
+    import subprocess
+
+    from driftwatch_llm import runner
+
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd) or subprocess.CompletedProcess(cmd, 0))
+    monkeypatch.setattr(runner.shutil, "which", lambda name, path=None: str(tmp_path / "venv" / "python.exe") if name == "python" else None)
+    runner.run_command(["python", "app.py", "--flag"])
+    runner.run_command(["unknown-tool", "x"])  # not found on PATH: left as given, so the OS reports the usual error
+    runner.run_command([str(tmp_path / "explicit" / "python.exe"), "app.py"])  # a path is never rewritten
+    assert seen[0] == [str(tmp_path / "venv" / "python.exe"), "app.py", "--flag"]
+    assert seen[1] == ["unknown-tool", "x"]
+    assert seen[2][0] == str(tmp_path / "explicit" / "python.exe")
