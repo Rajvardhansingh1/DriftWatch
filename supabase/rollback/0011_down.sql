@@ -1,0 +1,23 @@
+select cron.unschedule('driftwatch-runner-audit-prune');
+drop function if exists public.runner_health(text);
+drop function if exists public.runner_finish_job(text, uuid, uuid, text, integer);
+drop function if exists public.runner_write_signals(text, uuid, uuid, jsonb);
+drop function if exists public.runner_save_vectors(text, uuid, uuid, text, text, integer);
+drop function if exists public.runner_get_vectors(text, uuid, uuid);
+drop function if exists public.runner_get_secret(text, uuid, uuid);
+drop function if exists public.runner_claim_jobs(text);
+drop function if exists public.set_probes(uuid, jsonb);
+drop function if exists public.delete_connected_model(uuid);
+drop function if exists public.update_connected_model(uuid, integer, integer, boolean);
+drop function if exists public.connect_model(uuid, uuid, text, text, text, integer, text, text, text, integer, integer);
+drop function if exists private.require_lease(uuid, uuid);
+drop function if exists private.require_project_admin(uuid);
+drop function if exists private.require_runner(text);
+drop table if exists private.runner_audit;
+drop table if exists private.probe_vectors;
+drop table if exists private.connected_jobs;
+drop table if exists private.connected_secrets;
+drop table if exists public.connected_probes;
+drop table if exists public.connected_models;
+drop table if exists private.runner_policy;
+-- export_my_data(): re-run the definition from 0008 to remove the connected_* keys.

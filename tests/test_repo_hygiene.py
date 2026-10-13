@@ -19,6 +19,15 @@ ANON_EXECUTABLE_ALLOWLIST = {
     # Each call authenticates the key first and fails identically for malformed, unknown and revoked keys.
     "public.reserve_quota",
     "public.settle_quota",
+    # Plan 7 (0011): the scheduled runner has no session. Each function first checks the runner secret (its hash is in
+    # private.runner_policy; unset = closed), and all but claim/health also need a live job lease.
+    "public.runner_claim_jobs",
+    "public.runner_get_secret",
+    "public.runner_get_vectors",
+    "public.runner_save_vectors",
+    "public.runner_write_signals",
+    "public.runner_finish_job",
+    "public.runner_health",
 }
 
 
