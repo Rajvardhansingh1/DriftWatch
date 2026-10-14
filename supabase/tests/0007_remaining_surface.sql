@@ -132,6 +132,35 @@ do $$ begin
 end $$;
 reset role;
 
+-- ops_report: needs the runner secret, is closed to signed-in users, and returns aggregates only.
+update private.runner_policy set runner_secret_hash = extensions.digest('ops-secret', 'sha256');
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+do $$ declare r jsonb; begin
+  begin perform public.ops_report('wrong'); raise exception 'FAIL: ops_report with a wrong secret';
+  exception when sqlstate 'PT401' then null; end;
+  r := public.ops_report('ops-secret');
+  if (r ->> 'database_bytes')::bigint <= 0 or not (r ? 'signal_records' and r ? 'users' and r ? 'usage_today') then
+    raise exception 'FAIL: ops_report content %', r;
+  end if;
+  if r::text ~* '(email|key_hash|ciphertext|secret)' then raise exception 'FAIL: ops_report leaks identifiers %', r; end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated"}', true);
+do $$ begin
+  begin perform public.ops_report('ops-secret'); raise exception 'FAIL: a signed-in user called ops_report';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+update private.runner_policy set runner_secret_hash = null;
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+do $$ begin
+  begin perform public.ops_report('ops-secret'); raise exception 'FAIL: ops_report works with no secret configured';
+  exception when sqlstate 'PT401' then null; end;
+end $$;
+reset role;
+
 -- Deny by default: a table and a function created now get no rights for the API roles until they are granted.
 create table public.zz_probe_table (id int);
 create function public.zz_probe_fn() returns int language sql as 'select 1';

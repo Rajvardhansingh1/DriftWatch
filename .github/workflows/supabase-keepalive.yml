@@ -48,3 +48,20 @@ jobs:
               print("PROBLEM: " + "; ".join(problems))
               sys.exit(1)
           PY
+
+  # The free plan's database is 500 MB and goes read-only when full. This warns (by email, via a failed run) at 70%.
+  # It needs the runner secret, which lives in the cloud-runner environment; without it the step says so and passes.
+  capacity:
+    runs-on: ubuntu-latest
+    environment: cloud-runner
+    permissions: {}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check the database against the free-plan limit
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          RUNNER_SECRET: ${{ secrets.RUNNER_SECRET }}
+        run: python3 scripts/capacity_check.py
