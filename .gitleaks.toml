@@ -29,3 +29,9 @@ description = "A throwaway X25519 private key inside the committed seal test vec
 condition = "AND"
 paths = ['''^tests/fixtures/seal_v1\.json$''']
 regexes = ['''^[A-Za-z0-9+/=]{44}$''']
+
+[[allowlists]]
+description = "A made-up relay secret in the canary-key tests: the suite proves a secret-looking value is never echoed by any command. Not a credential."
+condition = "AND"
+paths = ['''^tests/cli/test_canary_keys\.py$''']
+regexes = ['''RELAY-SECRET-CANARY-0000-1111-2222''']

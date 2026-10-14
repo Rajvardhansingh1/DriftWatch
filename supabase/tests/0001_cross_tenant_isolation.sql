@@ -28,10 +28,17 @@ select set_config('test.a_counts',
 select set_config('request.jwt.claims',
   '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}', true);
 
-select
-  current_setting('test.a_counts') as a_orgs_members_projects,
-  (select count(*) from public.organizations) as b_orgs,
-  (select count(*) from public.organization_members) as b_members,
-  (select count(*) from public.projects) as b_projects;
+-- User A sees exactly their own org, membership and project; user B, who owns nothing, sees none of A's.
+select case
+  when current_setting('test.a_counts') = '1,1,1'
+   and (select count(*) from public.organizations) = 0
+   and (select count(*) from public.organization_members) = 0
+   and (select count(*) from public.projects) = 0
+  then 'PASS'
+  else 'FAIL: a=' || current_setting('test.a_counts') || ' b=' ||
+       (select count(*) from public.organizations) || ',' ||
+       (select count(*) from public.organization_members) || ',' ||
+       (select count(*) from public.projects)
+end;
 
 rollback;
