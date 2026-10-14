@@ -147,3 +147,16 @@ def test_two_children_that_both_die_still_record_one_failure_and_stop_retrying(h
     assert len(spawned) == 2  # one retry only: no storm
     assert json.loads((home / "agent" / "spawn.json").read_text())["ok"] is False
     assert ensure_agent() is False and len(spawned) == 2  # the backoff marker still holds
+
+
+def test_a_caller_that_is_shutting_down_cuts_the_wait_short_and_records_no_outcome(home, monkeypatch, tmp_path):
+    standin = "import time; time.sleep(30)"  # an agent that never comes up
+    monkeypatch.setenv("DRIFTWATCH_AGENT_CMD", json.dumps([sys.executable, "-c", standin]))
+    flag = {"stop": False}
+    import threading
+
+    threading.Timer(0.5, lambda: flag.update(stop=True)).start()
+    t0 = time.monotonic()
+    assert ensure_agent(cancelled=lambda: flag["stop"]) is False
+    assert time.monotonic() - t0 < 3.0  # not the full 8-second wait
+    assert not (home / "agent" / "spawn.json").exists()  # an unknown outcome must not block the next starter

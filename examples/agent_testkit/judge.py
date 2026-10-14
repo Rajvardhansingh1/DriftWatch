@@ -75,7 +75,8 @@ def main() -> int:
         ck.check(judge_state() == "off", "status says the judge is off", judge_state())
 
         # 2. on: sampled, redacted, only the documented fields
-        write_settings(home, JudgeSettings(enabled=True, credential="free", sample_every=2, max_per_day=40))
+        # max_per_day is high on purpose: the scenario sends far more than the default daily cap of 40
+        write_settings(home, JudgeSettings(enabled=True, credential="free", sample_every=2, max_per_day=500))
         traffic(env, 40, "a", planted)
         got = wait_for(lambda: len(relay.requests) >= 10 and len(relay.requests), 60)
         ck.check(bool(got), "once on, about every second response is sent to the relay", f"{len(relay.requests)} requests")

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Callable
 
 from driftwatch_llm.agent.ipc import IpcClient, agent_dir
 from driftwatch_llm.agent.lock import FileLock
@@ -44,12 +45,16 @@ def _write_marker(marker: Path, ok: bool) -> None:
         pass
 
 
-def _wait_until_alive(client: IpcClient, seconds: float, child: "subprocess.Popen | None" = None) -> bool:
+def _wait_until_alive(
+    client: IpcClient, seconds: float, child: "subprocess.Popen | None" = None, cancelled: Callable[[], bool] = lambda: False
+) -> bool:
     deadline = time.monotonic() + seconds
     exited_at: float | None = None
     while time.monotonic() < deadline:
         if _alive(client):
             return True
+        if cancelled():
+            return False
         if child is not None and child.poll() is not None:
             # The child is gone. It may have lost the lock race to an agent that is just coming up, so
             # allow a short grace period, then call it a failed start (fast, instead of waiting it all out).
@@ -92,8 +97,15 @@ def _spawn(home: Path | str | None, workdir: Path) -> "subprocess.Popen":
     return subprocess.Popen(_command(), start_new_session=True, **kwargs)
 
 
-def ensure_agent(home: Path | str | None = None, wait: float = START_WAIT, retry_after: float = RETRY_AFTER) -> bool:
-    """True when an agent is answering (it may have been started just now)."""
+def ensure_agent(
+    home: Path | str | None = None,
+    wait: float = START_WAIT,
+    retry_after: float = RETRY_AFTER,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> bool:
+    """True when an agent is answering (it may have been started just now).
+
+    `cancelled` lets a caller that is shutting down cut the waits short; a cancelled attempt records no outcome."""
     client = IpcClient(home, io_timeout=0.5)
     try:
         if _alive(client):
@@ -112,7 +124,7 @@ def ensure_agent(home: Path | str | None = None, wait: float = START_WAIT, retry
                 return True
             got = lock.acquire()
         if not got:
-            return _wait_until_alive(client, wait)  # someone else is starting it
+            return _wait_until_alive(client, wait, cancelled=cancelled)  # someone else is starting it
         try:
             if _alive(client):
                 return True
@@ -121,17 +133,24 @@ def ensure_agent(home: Path | str | None = None, wait: float = START_WAIT, retry
             # The marker is written only once the outcome is known: writing "failed" up front would make
             # every concurrent starter think the start had already failed and give up.
             child = _spawn(home, d)
-            up = _wait_until_alive(client, wait, child)
+            up = _wait_until_alive(client, wait, child, cancelled)
+            if not up and cancelled():
+                return False  # shutting down: the outcome is unknown, so nothing is recorded
             if not up and child.poll() is not None:
                 # The child died at once: usually an agent that was just stopped and still holds its OS lock for a
                 # moment (`agent stop`, then an immediate app start). One short pause and one more try, before the
                 # outcome is recorded: a failure marker blocks every starter for the next minute.
-                time.sleep(RESPAWN_PAUSE)
+                for _ in range(int(RESPAWN_PAUSE / 0.1)):
+                    if cancelled():
+                        return False
+                    time.sleep(0.1)
                 if _alive(client):
                     up = True
                 else:
                     child = _spawn(home, d)
-                    up = _wait_until_alive(client, wait, child)
+                    up = _wait_until_alive(client, wait, child, cancelled)
+                    if not up and cancelled():
+                        return False
             _write_marker(marker, ok=up)
             return up
         finally:
