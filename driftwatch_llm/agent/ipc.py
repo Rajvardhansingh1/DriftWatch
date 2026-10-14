@@ -262,7 +262,7 @@ class IpcServer:
                 os.unlink(self._address)  # a stale socket from a crashed agent (we hold the agent lock)
             except FileNotFoundError:
                 pass
-        self._listener = Listener(self._address, family=FAMILY)
+        self._listener = Listener(self._address, family=FAMILY, backlog=128)  # the default of 1 refuses simultaneous starters on macOS
         self._accept_thread = threading.Thread(target=self._accept_loop, name="dw-ipc-accept", daemon=True)
         self._accept_thread.start()
 
