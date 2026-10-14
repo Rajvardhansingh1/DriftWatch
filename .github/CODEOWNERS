@@ -1,0 +1,9 @@
+# Changes to anything that can touch users' sealed keys need the owner's review (enable "Require review from Code
+# Owners" in the main branch protection rule so this is enforced, not just suggested).
+/.github/workflows/      @Rajvardhansingh1
+/.github/CODEOWNERS      @Rajvardhansingh1
+/monitor/cloud/          @Rajvardhansingh1
+/supabase/               @Rajvardhansingh1
+/requirements-runner.txt @Rajvardhansingh1
+/frontend/lib/connect/   @Rajvardhansingh1
+/frontend/app/dashboard/*/connect/ @Rajvardhansingh1

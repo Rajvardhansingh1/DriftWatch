@@ -82,12 +82,27 @@ def start_agent() -> bool:
 
 
 def stop_agent(timeout: float = 20.0) -> bool:
+    """Ask the agent to stop and wait until it is really gone: it stops answering first, but its OS lock is held until
+    the process has exited, and a new agent started in that gap would lose the lock race."""
     ipc.IpcClient().send({"type": "stop"})
     deadline = time.time() + timeout
     while time.time() < deadline:
         if get_status(1.0) is None:
-            return True
+            break
         time.sleep(0.3)
+    else:
+        return False
+    from driftwatch_llm.agent.lock import FileLock
+
+    lock = FileLock(ipc.agent_dir() / "agent.lock")
+    while time.time() < deadline:
+        try:
+            if lock.acquire():
+                lock.release()
+                return True
+        except OSError:
+            pass
+        time.sleep(0.2)
     return False
 
 

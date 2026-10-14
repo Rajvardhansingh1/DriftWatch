@@ -1,3 +1,4 @@
+import { enabledFeatures } from "@/lib/features";
 import { Nav } from "../components/Nav";
 
 export const metadata = {
@@ -26,6 +27,9 @@ export default function Terms() {
           <li>DriftWatch is provided as is, without warranty. It flags statistical drift. It does not guarantee your model is correct.</li>
           <li>Do not use the demo, the API or any limits we set to send abusive content, to attack the service, or to get around those limits.</li>
           <li>If you add provider keys in future features, you are responsible for those keys and for the costs they incur.</li>
+          {enabledFeatures().has("cloudConnect") && (
+            <li>If you connect a model, our scheduled runner uses your provider key to call your provider on the schedule and budget you set. You are responsible for the key and for every charge your provider makes. You can pause or delete the connection at any time, and we may stop the runner at any time.</li>
+          )}
           <li>We may suspend accounts that abuse the service.</li>
           <li>We may change these terms. Changes will be announced on this page.</li>
         </ul>

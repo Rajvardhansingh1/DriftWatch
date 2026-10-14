@@ -45,6 +45,9 @@ export default async function ProjectPage({
             ))}
           </nav>
           <Link href={`/dashboard/${projectId}/keys`} className="rounded border border-line px-3 py-1.5 hover:border-dim">API keys</Link>
+          {enabledFeatures().has("cloudConnect") && (
+            <Link href={`/dashboard/${projectId}/connect`} className="rounded border border-line px-3 py-1.5 hover:border-dim">Connect a model</Link>
+          )}
         </div>
       </div>
       {quota && <AllowanceNote quota={quota} />}

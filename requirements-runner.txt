@@ -1,0 +1,6 @@
+# Exact versions for the cloud runner (.github/workflows/cloud-runner.yml). The runner opens users' provider keys, so
+# its dependencies are pinned and audited in CI (pip-audit). Update deliberately, with the full test suite.
+httpx==0.28.1
+numpy==2.2.6
+cryptography==50.0.1
+fastembed==0.9.0

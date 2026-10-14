@@ -47,6 +47,8 @@ function seed() {
     logouts: 0,
     projects: [{ id: DEMO_PROJECT_ID, organization_id: ORG_ID, name: "Demo app", settings: {}, created_at: new Date(now - 86_400_000).toISOString() }],
     project_api_keys: [],
+    connected_models: [], // cloud connect settings (no secret columns exist on this table)
+    connected_probes: [],
     device_codes: [], // device-login requests (mirrors private.device_codes in 0009)
     device_wrong_codes: 0, // wrong-code attempts by the one fake user (lockout at 5)
     signal_records,
@@ -103,7 +105,7 @@ function applyQuery(rows, params) {
   return limit ? out.slice(0, Number(limit)) : out;
 }
 
-const TABLES = ["projects", "signal_records", "signal_hourly", "project_api_keys"];
+const TABLES = ["projects", "signal_records", "signal_hourly", "project_api_keys", "connected_models", "connected_probes"];
 
 function rpc(name, args) {
   switch (name) {
@@ -141,6 +143,21 @@ function rpc(name, args) {
         signal_hourly: state.signal_hourly,
         audit_events: [],
       }];
+    // ---- cloud connect (0011). Only what the console calls; the sealed key is accepted and dropped, never stored.
+    case "delete_connected_model":
+      state.connected_models = state.connected_models.filter((m) => m.project_id !== args.p_project_id);
+      return [204, undefined];
+    case "update_connected_model": {
+      const m = state.connected_models.find((x) => x.project_id === args.p_project_id);
+      if (!m) return [204, undefined];
+      if (args.p_interval_minutes < 15) return [422, { code: "PT422", message: "invalid settings", details: null, hint: null }];
+      Object.assign(m, { interval_minutes: args.p_interval_minutes, monthly_budget: args.p_monthly_budget, enabled: args.p_enabled });
+      return [204, undefined];
+    }
+    case "set_probes":
+      state.connected_probes = state.connected_probes.filter((p) => p.project_id !== args.p_project_id);
+      (args.p_probes ?? []).forEach((p, i) => state.connected_probes.push({ project_id: args.p_project_id, position: i + 1, ...p }));
+      return [204, undefined];
     case "delete_my_account":
       state.deleted = true;
       return [204, undefined];

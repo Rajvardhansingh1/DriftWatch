@@ -106,7 +106,7 @@ class CaptureClient:
                         announced = snapshot
                     elif link.last_error == "unavailable" and now >= next_ensure:
                         next_ensure = now + self._ensure_every
-                        launcher.ensure_agent(self._home)  # may take seconds; this is not the app's thread
+                        launcher.ensure_agent(self._home, cancelled=self._stop.is_set)  # may take seconds; this is not the app's thread
                         continue
                 if announced is not None:
                     while self._queue and not self._stop.is_set():

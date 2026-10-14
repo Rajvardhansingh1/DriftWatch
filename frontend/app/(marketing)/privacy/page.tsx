@@ -1,3 +1,4 @@
+import { enabledFeatures } from "@/lib/features";
 import { Nav } from "../components/Nav";
 
 export const metadata = {
@@ -38,6 +39,13 @@ export default function Privacy() {
         <h2 className={h2}>The local agent</h2>
         <p className={p}>The local agent (installed with pip) sends us only the scores it computes, with small metadata such as which signal, when, and which embedding model. Prompts are never read. The text of a response stays on your machine: it is held in memory long enough to compute a score and is never written to disk or sent to us.</p>
         <p className={p}>The optional judge is off until you turn it on. When it is on, about one in 25 responses is redacted on your machine (emails, API keys, tokens and long numbers are masked, and the text is cut to 1500 characters) and sent for grading: to the model provider you chose, using your own key, or, if you use the free allowance, to our relay. The relay forwards it to a language-model provider (currently Groq), keeps nothing, and logs only a status code and a duration. We store a count of how many graded samples your account has used, never their content.</p>
+
+        {enabledFeatures().has("cloudConnect") && (
+          <>
+            <h2 className={h2}>Connected models</h2>
+            <p className={p}>If you connect a model from the website, you give us your own provider API key. It reaches our server over an encrypted connection, is checked once with your provider, and is then encrypted with a key that only our scheduled runner holds, so our website and database cannot read it afterwards. The runner opens it only while it runs your fixed questions, and it is never written to a log. We store the encrypted key, its last four characters, your schedule, your probe questions, and numbers derived from the answers (never the answers themselves). You can delete all of it at any time on the connect page; deleting your project or account removes it too. Every question is a call on your provider account and is billed by your provider.</p>
+          </>
+        )}
 
         <h2 className={h2}>How long we will keep scores</h2>
         <p className={p}>Raw scores will be kept for 30 days, then rolled up into hourly summaries.</p>

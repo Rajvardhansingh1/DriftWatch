@@ -94,7 +94,7 @@ def test_a_failing_spawn_is_not_retried_in_a_storm(home, tmp_path, monkeypatch):
     assert ensure_agent() is False
     assert ensure_agent() is False
     assert ensure_agent() is False
-    assert log.read_text().split() == ["x"]  # one attempt, then backed off
+    assert log.read_text().split() == ["x", "x"]  # one attempt and one short retry, then backed off (no storm)
 
 
 def test_the_spawned_agent_runs_with_capture_disabled(home, tmp_path, monkeypatch):
@@ -110,3 +110,53 @@ def test_the_spawned_agent_runs_with_capture_disabled(home, tmp_path, monkeypatc
         time.sleep(0.1)
     got = json.loads(out.read_text())
     assert got["disable"] == "1" and got["home"] == str(home)
+
+
+def test_a_spawn_that_loses_the_lock_to_an_agent_still_shutting_down_is_retried_not_recorded_as_a_failure(home, monkeypatch):
+    """`agent stop` and an immediate app start: the old agent still holds its OS lock for a moment, so the new child exits
+    at once. That must not poison the next minute with a 'failed' marker; one short retry finds the lock free."""
+    from driftwatch_llm.agent import launcher
+
+    real_spawn = launcher._spawn
+    spawned = []
+
+    def spawn(h, workdir):
+        spawned.append(time.monotonic())
+        if len(spawned) == 1:  # the first child dies immediately, as if it had lost the lock race
+            return subprocess.Popen([sys.executable, "-c", "raise SystemExit(1)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return real_spawn(h, workdir)
+
+    monkeypatch.setattr(launcher, "_spawn", spawn)
+    assert ensure_agent() is True
+    assert len(spawned) == 2 and agent_pid(home)
+    marker = json.loads((home / "agent" / "spawn.json").read_text())
+    assert marker["ok"] is True  # no failure was recorded, so nothing is blocked for the next minute
+
+
+def test_two_children_that_both_die_still_record_one_failure_and_stop_retrying(home, monkeypatch):
+    from driftwatch_llm.agent import launcher
+
+    spawned = []
+
+    def spawn(h, workdir):
+        spawned.append(1)
+        return subprocess.Popen([sys.executable, "-c", "raise SystemExit(1)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    monkeypatch.setattr(launcher, "_spawn", spawn)
+    assert ensure_agent() is False
+    assert len(spawned) == 2  # one retry only: no storm
+    assert json.loads((home / "agent" / "spawn.json").read_text())["ok"] is False
+    assert ensure_agent() is False and len(spawned) == 2  # the backoff marker still holds
+
+
+def test_a_caller_that_is_shutting_down_cuts_the_wait_short_and_records_no_outcome(home, monkeypatch, tmp_path):
+    standin = "import time; time.sleep(30)"  # an agent that never comes up
+    monkeypatch.setenv("DRIFTWATCH_AGENT_CMD", json.dumps([sys.executable, "-c", standin]))
+    flag = {"stop": False}
+    import threading
+
+    threading.Timer(0.5, lambda: flag.update(stop=True)).start()
+    t0 = time.monotonic()
+    assert ensure_agent(cancelled=lambda: flag["stop"]) is False
+    assert time.monotonic() - t0 < 3.0  # not the full 8-second wait
+    assert not (home / "agent" / "spawn.json").exists()  # an unknown outcome must not block the next starter

@@ -107,6 +107,12 @@ export const FAQ: { question: string; answer: string; needs?: Feature[] }[] = [
     needs: ["freeKey"],
   },
   {
+    question: "What happens to the API key I connect from the web?",
+    answer:
+      "Your key travels over an encrypted connection, is checked once with your provider, then encrypted with a key that only our scheduled runner holds, so the website and database cannot read it. The runner uses it for fixed questions on your schedule and budget. You pay your provider for those calls, and you can delete the key any time.",
+    needs: ["cloudConnect"],
+  },
+  {
     question: "Who pays for the LLM calls DriftWatch makes?",
     answer:
       "Each account gets a small free allowance on our key, enough to try DriftWatch on a real app. When it runs out, add your own provider key and keep going on your own account with your provider. You can also bring your own key from the start and skip the allowance entirely if you would rather not use ours.",
