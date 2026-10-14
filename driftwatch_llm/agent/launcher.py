@@ -21,6 +21,7 @@ from driftwatch_llm.agent.lock import FileLock
 SPAWN_LOCK_WAIT = 3.0
 START_WAIT = 8.0
 RETRY_AFTER = 60.0
+RESPAWN_PAUSE = 1.5  # between a first spawn that died instantly and its single retry
 
 
 def _alive(client: IpcClient) -> bool:
@@ -121,6 +122,16 @@ def ensure_agent(home: Path | str | None = None, wait: float = START_WAIT, retry
             # every concurrent starter think the start had already failed and give up.
             child = _spawn(home, d)
             up = _wait_until_alive(client, wait, child)
+            if not up and child.poll() is not None:
+                # The child died at once: usually an agent that was just stopped and still holds its OS lock for a
+                # moment (`agent stop`, then an immediate app start). One short pause and one more try, before the
+                # outcome is recorded: a failure marker blocks every starter for the next minute.
+                time.sleep(RESPAWN_PAUSE)
+                if _alive(client):
+                    up = True
+                else:
+                    child = _spawn(home, d)
+                    up = _wait_until_alive(client, wait, child)
             _write_marker(marker, ok=up)
             return up
         finally:
