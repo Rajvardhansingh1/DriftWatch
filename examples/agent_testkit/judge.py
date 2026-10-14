@@ -77,6 +77,9 @@ def main() -> int:
         # 2. on: sampled, redacted, only the documented fields
         # max_per_day is high on purpose: the scenario sends far more than the default daily cap of 40
         write_settings(home, JudgeSettings(enabled=True, credential="free", sample_every=2, max_per_day=500))
+        # The agent re-reads the settings at most every 5 seconds. Wait until it says the judge is on: on a fast machine
+        # the whole next traffic burst can otherwise finish inside that window and see the old "off".
+        ck.check(bool(wait_for(lambda: judge_state() != "off", 30)), "the agent picks up the new setting", judge_state())
         traffic(env, 40, "a", planted)
         got = wait_for(lambda: len(relay.requests) >= 5 and len(relay.requests), 120)  # a slow machine grades slowly; the point is that sampling works
         ck.check(bool(got), "once on, sampled responses are sent to the relay", f"{len(relay.requests)} requests")
