@@ -84,6 +84,32 @@ logs/
 Docs/
 .superpowers/
 
+# --- Assistant and browser-automation scratch -------------------------------
+.planning/
+.playwright/
+.playwright-mcp/
+.codex/
+.cursor/
+.aider*
+
+# --- More local files that should never be committed -------------------------
+.env.local
+.env.*.local
+*.tfstate
+*.tfstate.*
+*.bak
+*.orig
+*.rej
+*.tmp
+*.pid
+.pgdata/
+supabase/.temp/
+supabase/.branches/
+.lighthouseci/
+lighthouse*.json
+*.har
+*.pcap
+
 # --- OS and editors ----------------------------------------------------------
 .DS_Store
 Thumbs.db
