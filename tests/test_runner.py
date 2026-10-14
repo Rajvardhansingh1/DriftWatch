@@ -231,7 +231,8 @@ def test_one_bad_job_does_not_stop_the_next(capsys):
 
 
 # -- nothing secret reaches output -------------------------------------------------------------------------------
-def test_no_key_answer_or_private_key_reaches_stdout_stderr_or_logs(capsys, caplog):
+def test_no_key_answer_or_private_key_reaches_stdout_stderr_or_logs(capsys, caplog, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)  # CI sets it; the masking line it triggers is tested separately
     caplog.set_level(logging.DEBUG)
     api = FakeApi()
     answers = {k: f"{v} {MARKER}" for k, v in GOOD.items()}
