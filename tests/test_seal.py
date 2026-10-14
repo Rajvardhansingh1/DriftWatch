@@ -84,7 +84,10 @@ def test_the_committed_vectors_made_by_node_open_in_python():
         assert seal.open_sealed(fx["private_key"], v["model_id"], v["box"]) == v["plaintext"]
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.skipif(
+    shutil.which("node") is None or not (ROOT / "frontend" / "node_modules" / "tsx").exists(),
+    reason="node and the frontend dependencies (npm ci) are needed; the frontend CI job runs this test",
+)
 def test_a_fresh_node_seal_opens_in_python_and_binds_the_row():
     priv, pub = seal.generate_keypair()
     code = (
