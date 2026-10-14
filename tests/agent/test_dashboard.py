@@ -201,3 +201,19 @@ def test_an_oversized_session_body_is_refused(server):
     except (ConnectionError, http.client.HTTPException):
         return  # the server hung up without reading the body: also a refusal
     assert status in (400, 413)
+
+
+def test_starting_the_server_never_does_a_reverse_dns_lookup(tmp_path, monkeypatch):
+    """http.server's default bind calls socket.getfqdn, which took seconds on macOS runners and made `driftwatch dashboard`
+    time out. A start must not depend on name resolution at all."""
+    import socket
+
+    def slow_lookup(*a, **k):
+        raise AssertionError("getfqdn was called while starting the dashboard server")
+
+    monkeypatch.setattr(socket, "getfqdn", slow_lookup)
+    s = DashboardServer(Provider(), static_dir=tmp_path / "x")
+    try:
+        assert s.start() > 0
+    finally:
+        s.stop()

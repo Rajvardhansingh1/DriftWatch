@@ -327,7 +327,7 @@ def test_the_socket_prefers_the_per_user_runtime_directory(tmp_path, monkeypatch
     import shutil
     import tempfile
 
-    runtime = Path(tempfile.mkdtemp(prefix="dwrt"))  # short, like /run/user/1000 (a long one falls back to /tmp)
+    runtime = Path(tempfile.mkdtemp(prefix="dwrt", dir="/tmp"))  # short, like /run/user/1000 (macOS temp paths are long, and a long one falls back to /tmp)
     try:
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
         assert ipc.address_for(tmp_path / "h").startswith(str(runtime / "driftwatch"))

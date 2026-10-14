@@ -41,12 +41,12 @@ EXTRA_HINT = 'The agent needs extra packages: pip install "driftwatch-llm[agent]
 
 
 # -- helpers ---------------------------------------------------------------------------------------------
-def agent_for(s: Services) -> Any:
+def agent_for(s: Services, io_timeout: float | None = None) -> Any:
     if s.agent_client is not None:
         return s.agent_client()
     from driftwatch_llm.agent.ipc import IpcClient  # deferred: keeps `driftwatch --help` quick
 
-    return IpcClient(s.home)
+    return IpcClient(s.home) if io_timeout is None else IpcClient(s.home, io_timeout=io_timeout)
 
 
 def install_hook(s: Services) -> Path:
@@ -438,7 +438,7 @@ def dashboard(
         started = ensure_agent(s.home)
     if not started:
         _fail("Could not start the agent. Check `driftwatch doctor`.")
-    reply = agent_for(s).send({"type": "dashboard"})
+    reply = agent_for(s, io_timeout=10.0).send({"type": "dashboard"})  # starting a web server can take a moment
     if not reply or not reply.get("ok") or not isinstance(reply.get("port"), int) or not isinstance(reply.get("token"), str):
         _fail("The running agent is older than this command (or did not answer). Run: driftwatch agent stop, then try again.")
     base = f"http://127.0.0.1:{reply['port']}/"
