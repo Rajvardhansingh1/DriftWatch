@@ -42,23 +42,26 @@ export function HeroVisual() {
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: number | undefined;
     const decide = () => setMode(!mq.matches && canUseWebGL() ? "3d" : "static");
-    decide();
-    mq.addEventListener("change", decide);
-    return () => mq.removeEventListener("change", decide);
+    // The still image is what first paints (and what the server renders). The animated scene joins a moment after the page has
+    // loaded, so a continuously changing canvas does not hold up the page's first impression.
+    const start = () => {
+      timer = window.setTimeout(decide, 1500);
+    };
+    if (mq.matches) decide();
+    else if (document.readyState === "complete") start();
+    else window.addEventListener("load", start, { once: true });
+    const onChange = () => decide();
+    mq.addEventListener("change", onChange);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("load", start);
+      mq.removeEventListener("change", onChange);
+    };
   }, []);
 
-  if (mode === "pending")
-    return (
-      <div className="relative h-full w-full">
-        <Skeleton label="Loading 3D view" className="h-full w-full" />
-        <noscript>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/hero-fallback.svg" alt="" className="absolute inset-0 h-full w-full" />
-        </noscript>
-      </div>
-    );
-  if (mode === "static") return <StaticHero />;
+  if (mode === "pending" || mode === "static") return <StaticHero />;
   return (
     <SceneBoundary>
       <HeroScene onContextLost={() => setMode("static")} />
