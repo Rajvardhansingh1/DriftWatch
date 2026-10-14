@@ -70,6 +70,8 @@ jobs:
       - run: python -m pytest tests/test_seal.py -q -p no:cacheprovider --confcutdir=tests/fixtures
         working-directory: .
       - run: npx tsc --noEmit
+      # high and critical advisories fail the build unless deploy/audit-exceptions.json accepts them (with a reason and an expiry)
+      - run: node scripts/audit-check.mjs
       - run: npm test
       - run: npm run build
         env:
@@ -87,6 +89,10 @@ jobs:
           python-version: "3.11"
       - run: pip install pip-audit
       - run: pip-audit -r requirements-runner.txt
+      # What Render runs (the lean set; the full requirements.txt adds torch and is development-only). Audited as an
+      # installed environment, because the dependency resolver inside pip-audit cannot solve this set on its own.
+      - run: python -m venv /tmp/lean && /tmp/lean/bin/python -m pip install -q --upgrade pip setuptools && /tmp/lean/bin/python -m pip install -q -r requirements-lean.txt
+      - run: pip-audit --path /tmp/lean/lib/python3.11/site-packages
 
   secrets:
     runs-on: ubuntu-latest

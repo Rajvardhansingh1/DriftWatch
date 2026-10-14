@@ -1,0 +1,30 @@
+{
+  "note": "Known audit findings we have chosen to live with for now. Each needs a reason and an expiry date; CI fails when one expires, so it gets looked at again. Fix it instead whenever a fix exists.",
+  "npm": [
+    {
+      "id": "GHSA-qx2v-qp2m-jg93",
+      "package": "postcss (bundled inside next)",
+      "reason": "Only reachable when PostCSS processes attacker-controlled CSS. The build processes our own CSS only and the deployed site runs no PostCSS. The fix needs next 16 (a breaking upgrade).",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-6g55-p6wh-862q",
+      "package": "postcss (bundled inside next)",
+      "reason": "Needs attacker-controlled CSS comments (sourceMappingURL) at build time; we build only our own CSS. Fixed in next 16.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-fxqj-rqcc-2cmp",
+      "package": "postcss (bundled inside next)",
+      "reason": "Incomplete fix of the one above; same reasoning and same fix.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-r28c-9q8g-f849",
+      "package": "postcss (bundled inside next)",
+      "reason": "Path traversal through source maps while building attacker-supplied CSS; not reachable from our build.",
+      "expires": "2026-12-31"
+    }
+  ],
+  "pip": []
+}
