@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import socketserver
 import sys
 import threading
 import time
@@ -33,6 +34,13 @@ from typing import Any
 
 MODES = ("ok", "exhausted", "unauth", "unverified", "slow", "error", "unscorable")
 KEY = re.compile(r"^dw_[0-9a-f]{10}_[0-9a-f]{64}$")
+
+
+class _LoopbackServer(ThreadingHTTPServer):
+    def server_bind(self) -> None:  # no reverse DNS lookup (it can take seconds on some systems)
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
 
 
 class FakeRelay:
@@ -77,7 +85,7 @@ class FakeRelay:
                 else:
                     self._send(404, {})
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        self._server = _LoopbackServer(("127.0.0.1", port), Handler)
         self._server.daemon_threads = True
         self.port = self._server.server_address[1]
         self.url = f"http://127.0.0.1:{self.port}"

@@ -21,6 +21,7 @@ import hmac
 import json
 import re
 import secrets
+import socketserver
 import threading
 import time
 from http import cookies
@@ -59,6 +60,16 @@ _MISSING = (
 )
 
 
+class _LoopbackServer(ThreadingHTTPServer):
+    """http.server's default bind does a reverse DNS lookup (`socket.getfqdn`) just to fill in a name nobody uses. On some
+    systems (macOS CI runners) that takes seconds, which made `driftwatch dashboard` time out. Skip it."""
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "127.0.0.1"
+        self.server_port = self.server_address[1]
+
+
 class Provider(Protocol):
     def projects(self) -> list[str]: ...
     def series(self, project_id: str, range_name: str) -> dict[str, Any]: ...
@@ -80,7 +91,7 @@ class DashboardServer:
         self._lock = threading.Lock()
         self._allowed_hosts: set[str] = set()
         self._allowed_origins: set[str] = set()
-        self._httpd: ThreadingHTTPServer | None = None
+        self._httpd: _LoopbackServer | None = None
         self._thread: threading.Thread | None = None
         outer = self
 
@@ -109,7 +120,7 @@ class DashboardServer:
     def start(self) -> int:
         if self._httpd is not None:
             return self.address[1]
-        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._handler_cls)
+        self._httpd = _LoopbackServer(("127.0.0.1", 0), self._handler_cls)
         self._httpd.daemon_threads = True
         port = self.address[1]
         self._allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}

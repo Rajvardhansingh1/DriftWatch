@@ -60,7 +60,7 @@ def main() -> int:
             return s and s["queued"] == 0 and sum(p["pending"] for p in s["projects"].values()) == 0 and server.count() >= 2 and s
 
         ck.check(bool(wait_for(synced, 90)), "every event reached the cloud", f"{server.count()} events")
-        reply = ipc.IpcClient().send({"type": "dashboard"})
+        reply = ipc.IpcClient(io_timeout=15.0).send({"type": "dashboard"})
         ck.check(bool(reply and reply.get("ok")), "the agent starts its dashboard")
         port, token = reply["port"], reply["token"]
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)

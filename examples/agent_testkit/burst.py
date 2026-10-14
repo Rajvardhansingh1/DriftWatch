@@ -40,7 +40,7 @@ def main() -> int:
 
     def worker(i: int) -> None:
         rng = random.Random(i)
-        client = ipc.IpcClient()
+        client = ipc.IpcClient(io_timeout=15.0)  # a loaded machine can stall one reply for more than the 1 s default
         for k in range(per):
             t0 = time.perf_counter()
             reply = client.send({"type": "capture", "project_id": pid, "provider": "openai", "model": "burst",
