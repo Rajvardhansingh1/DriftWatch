@@ -59,10 +59,15 @@ def _check_provider(provider: str) -> None:
 def key_set(
     ctx: typer.Context,
     provider: str = typer.Argument(..., help="groq, openai or openai-compatible"),
+    unexpected: str | None = typer.Argument(None, hidden=True),
     stdin: bool = typer.Option(False, "--stdin", help="Read the key from standard input (for scripts)."),
 ) -> None:
     """Store a provider key in your OS keychain. The key is typed or piped in, never given as an argument."""
     s = _svc(ctx)
+    if unexpected is not None:
+        # Accepted only to be refused: Typer's own usage error would print the value back, and a key must not be echoed.
+        _fail("Do not put the key on the command line: it would stay in your shell history. Run `driftwatch key set "
+              f"{provider if provider in PROVIDER_NAMES else 'PROVIDER'}` and paste it when asked (or use --stdin).")
     _check_provider(provider)
     if stdin:
         value = sys.stdin.readline().strip()

@@ -7,13 +7,13 @@ Generated from `deploy/hardening_matrix.json` by `scripts/make_launch_gates.py`;
 
 | ID | Risk | Status | Evidence | Owner action |
 |---|---|---|---|---|
-| A1 | SECURITY DEFINER helpers executable by anon | tested | `tests/test_repo_hygiene.py::test_only_allowlisted_functions_are_executable_by_anon`<br>`tests/test_migrations_static.py::test_0005_revokes_anon_on_known_definer_functions` |  |
+| A1 | SECURITY DEFINER helpers executable by anon | tested | `tests/test_repo_hygiene.py::test_only_allowlisted_functions_are_executable_by_anon`<br>`tests/test_migrations_static.py::test_0005_revokes_anon_on_known_definer_functions`<br>`supabase/migrations/0012_runner_privileges.sql` |  |
 | A2 | create_organization executable by anon | tested | `tests/test_repo_hygiene.py::test_only_allowlisted_functions_are_executable_by_anon`<br>`supabase/tests/0001_cross_tenant_isolation.sql` |  |
 | A3 | audit_events had no write path | tested | `supabase/tests/0002_api_keys_ingest.sql`<br>`supabase/tests/0006_connected_models.sql` |  |
 | A4 | RLS policies call auth.uid() per row | tested | `tests/test_migrations_static.py::test_0006_definer_functions_pin_empty_search_path`<br>`supabase/migrations/0005_security_hardening.sql` |  |
 | A5 | No security headers or middleware | tested | `frontend/tests/headers.test.ts`<br>`frontend/tests/middleware.test.ts` |  |
 | A6 | validate_event unbounded timestamps, meta and values | tested | `tests/test_cloud_ingest.py::test_future_timestamp_rejected`<br>`tests/test_cloud_ingest.py::test_ancient_timestamp_rejected`<br>`tests/test_cloud_ingest.py::test_meta_too_many_keys_rejected`<br>`tests/test_cloud_ingest.py::test_absurd_value_rejected` |  |
-| A7 | signal_records insert path set protected columns | tested | `supabase/tests/0002_api_keys_ingest.sql`<br>`supabase/tests/0003_console_functions.sql` |  |
+| A7 | signal_records insert path set protected columns (direct inserts now closed) | tested | `supabase/tests/0002_api_keys_ingest.sql`<br>`supabase/tests/0003_console_functions.sql`<br>`supabase/tests/0007_remaining_surface.sql`<br>`supabase/migrations/0013_least_privilege.sql` |  |
 | A8 | JWT verification (legacy HS256 only) | tested | `tests/test_cloud_auth.py::test_es256_token_verified_through_jwks`<br>`tests/test_cloud_auth.py::test_alg_none_token_is_rejected`<br>`tests/test_cloud_auth.py::test_wrong_secret_raises_auth_error` |  |
 | A9 | .mcp.json tracked in git | tested | `tests/test_repo_hygiene.py::test_mcp_json_is_not_tracked` |  |
 | A10 | Secret scan | tested | `tests/test_repo_hygiene.py::test_dotenv_is_not_tracked`<br>`.gitleaks.toml`<br>`.github/workflows/ci.yml` |  |
@@ -31,7 +31,7 @@ Generated from `deploy/hardening_matrix.json` by `scripts/make_launch_gates.py`;
 | C3 | Feedback loop: the agent captures its own judge calls | tested | `tests/agent/test_launcher.py::test_the_spawned_agent_runs_with_capture_disabled`<br>`tests/capture/test_wrappers.py` |  |
 | C4 | Startup race and deadlock | tested | `tests/agent/test_launcher.py::test_a_hard_killed_agent_is_replaced`<br>`tests/agent/test_launcher.py::test_a_spawn_that_loses_the_lock_to_an_agent_still_shutting_down_is_retried_not_recorded_as_a_failure`<br>`tests/agent/test_lock.py` |  |
 | C5 | Localhost API attackable from any website | tested | `tests/agent/test_dashboard.py::test_a_foreign_host_header_is_refused_even_with_a_valid_cookie`<br>`tests/agent/test_dashboard.py::test_a_foreign_origin_is_refused_and_there_are_no_cors_headers`<br>`tests/agent/test_ipc.py` |  |
-| C6 | Secrets at rest without a keychain | tested | `tests/cli/test_secrets.py`<br>`tests/cli/test_providerkeys.py` |  |
+| C6 | Secrets at rest without a keychain | tested | `tests/cli/test_secrets.py`<br>`tests/cli/test_providerkeys.py`<br>`tests/cli/test_canary_keys.py` |  |
 | C7 | Device-code flow attacks | tested | `supabase/tests/0004_device_auth.sql`<br>`tests/cli/test_device_flow.py` |  |
 | C8 | Capture breaks or slows the user's app | tested | `tests/capture/test_wrappers.py`<br>`tests/capture/test_client.py`<br>`tests/capture/test_real_sdks.py` |  |
 | C9 | Privacy: prompts and responses are sensitive | tested | `tests/agent/test_engine.py::test_no_response_text_reaches_the_store_the_outbox_or_disk`<br>`tests/test_agent_testkit.py::test_the_kit_passes_end_to_end`<br>`tests/core/test_redact.py` |  |
@@ -52,7 +52,7 @@ Generated from `deploy/hardening_matrix.json` by `scripts/make_launch_gates.py`;
 | E2 | Quota race and double spend | tested | `supabase/tests/0005_usage_quota.sql`<br>`scripts/test_quota_concurrency_local.py` |  |
 | E3 | Runaway total spend | tested | `tests/test_llm_proxy.py::test_the_kill_switch_and_a_missing_provider_close_the_route`<br>`supabase/tests/0005_usage_quota.sql`<br>`supabase/runbooks/switches_off.sql` |  |
 | E4 | BYOK SSRF and key exfiltration | tested | `tests/test_providers.py::test_an_unknown_provider_or_a_host_override_is_refused_before_any_request`<br>`frontend/tests/connect-core.test.ts`<br>`supabase/tests/0006_connected_models.sql` |  |
-| E5 | Key leakage through logs and exceptions | tested | `tests/test_llm_proxy.py::test_request_text_keys_and_provider_words_never_reach_any_log_line`<br>`tests/test_runner.py::test_no_key_answer_or_private_key_reaches_stdout_stderr_or_logs`<br>`tests/test_logging_redaction.py::test_project_api_keys_are_redacted` |  |
+| E5 | Key leakage through logs and exceptions | tested | `tests/test_llm_proxy.py::test_request_text_keys_and_provider_words_never_reach_any_log_line`<br>`tests/test_runner.py::test_no_key_answer_or_private_key_reaches_stdout_stderr_or_logs`<br>`tests/test_logging_redaction.py::test_project_api_keys_are_redacted`<br>`tests/cli/test_canary_keys.py` |  |
 | E6 | Stored-key blast radius | tested | `tests/test_seal.py::test_a_sealed_key_cannot_be_moved_altered_or_opened_by_anyone_else`<br>`scripts/test_runner_e2e_local.py`<br>`deploy/RUNBOOK_CLOUD_CONNECT.md` | Rotation drills and the compromise tabletop (cloud-connect runbook, Parts 3 and 4) |
 | E7 | Cloud runner cost and abuse | tested | `supabase/tests/0006_connected_models.sql`<br>`tests/test_providers.py` |  |
 | F1 | Two runners run the same job | tested | `scripts/test_runner_concurrency_local.py`<br>`supabase/tests/0006_connected_models.sql` |  |
