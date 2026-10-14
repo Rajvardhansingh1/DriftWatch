@@ -33,7 +33,7 @@ Platform-admin status is an explicit configuration allowlist. It is never derive
 - `content_capture` defaults to `false`.
 - A repeated `(project_id, event_id)` returns `duplicate` and does not re-count.
 
-An HTTP `POST /v1/events` route is NOT exposed yet. It needs a durable idempotency store (Supabase `signal_records` unique constraint), which is blocked by the pending Supabase permission path.
+There is no HTTP `POST /v1/events` route. Events enter through one path: the `ingest_event` database function (a project API key plus the event), which enforces this contract, the size and rate limits and idempotency. Direct inserts into `signal_records` are closed (migration `0013`).
 
 ## Error model
 
