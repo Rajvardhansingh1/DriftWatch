@@ -74,8 +74,22 @@ do $$ declare c record; begin
   exception when insufficient_privilege then null; end;
   begin update public.connected_models set provider = 'openai'; raise exception 'FAIL: direct update allowed';
   exception when insufficient_privilege then null; end;
-  begin perform public.runner_claim_jobs('x'); raise exception 'FAIL: A called a runner function';
-  exception when insufficient_privilege then null; when sqlstate 'PT401' then null; end;
+  -- A signed-in user must not even be able to CALL the runner's functions (Supabase grants new functions to
+  -- authenticated by default, so this needs an explicit revoke). "Wrong secret" is not good enough: it must be 42501.
+  begin perform public.runner_claim_jobs('x'); raise exception 'FAIL: A called runner_claim_jobs';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_get_secret('x', gen_random_uuid(), gen_random_uuid()); raise exception 'FAIL: A called runner_get_secret';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_get_vectors('x', gen_random_uuid(), gen_random_uuid()); raise exception 'FAIL: A called runner_get_vectors';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_save_vectors('x', gen_random_uuid(), gen_random_uuid(), '', '', 1); raise exception 'FAIL: A called runner_save_vectors';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_write_signals('x', gen_random_uuid(), gen_random_uuid(), '[]'::jsonb); raise exception 'FAIL: A called runner_write_signals';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_finish_job('x', gen_random_uuid(), gen_random_uuid(), 'ok', 1); raise exception 'FAIL: A called runner_finish_job';
+  exception when insufficient_privilege then null; end;
+  begin perform public.runner_health('x'); raise exception 'FAIL: A called runner_health';
+  exception when insufficient_privilege then null; end;
 end $$;
 select set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated"}', true);
 do $$ begin

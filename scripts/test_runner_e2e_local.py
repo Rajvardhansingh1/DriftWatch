@@ -13,6 +13,7 @@ Exit code 1 on any failure.
 import base64
 import contextlib
 import io
+import os
 import json
 import sys
 import uuid
@@ -113,6 +114,9 @@ def provider(prov, key, model, system, prompt, temperature=0.0, **_):
 
 runner = Runner(DbApi(), PRIVATE, embedder=make_embedder("hash"), complete=provider)
 out = io.StringIO()
+# GitHub Actions sets this, and the runner then prints a masking command that carries the key on purpose (so the log shows ***).
+# This check is about everything else the runner prints, so it runs as it would anywhere else.
+os.environ.pop("GITHUB_ACTIONS", None)
 with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
     summary = runner.run_once()
 print(out.getvalue()); check(summary == {"jobs": 1, "ok": 1, "failed": 0}, "the runner claimed one job and finished it ok")

@@ -19,11 +19,12 @@ def test_runs_only_on_cli_tags_or_by_hand():
     assert on["push"] == {"tags": ["cli-v*"]}
 
 
-def test_default_permissions_are_read_only_and_only_publish_gets_the_oidc_token():
+def test_default_permissions_are_read_only_and_only_publish_and_attest_get_the_oidc_token():
     wf = _wf()
     assert wf["permissions"] == {"contents": "read"}
-    assert "id-token" not in str(wf["jobs"]["build"].get("permissions", ""))
+    assert "id-token" not in str(wf["jobs"]["build"].get("permissions", ""))  # the job that runs tests and builds has no token
     assert wf["jobs"]["publish"]["permissions"]["id-token"] == "write"
+    assert {j for j, v in wf["jobs"].items() if "id-token" in str(v.get("permissions", ""))} == {"publish", "attest"}
 
 
 def test_publish_uses_a_sha_pinned_action_from_the_pypi_environment_with_no_token():
@@ -49,3 +50,24 @@ def test_build_runs_the_cli_tests_before_building_and_uploads_dist():
 def test_the_tag_must_match_the_package_version_before_anything_is_published():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "driftwatch_llm/__init__.py" in text and "GITHUB_REF_NAME" in text
+
+
+def test_every_release_job_after_the_build_uses_only_sha_pinned_actions():
+    wf = _wf()
+    for name in ("publish", "attest"):
+        for step in wf["jobs"][name]["steps"]:
+            if "uses" in step:
+                assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", step["uses"]), f"{name}: {step['uses']} is not pinned to a commit"
+
+
+def test_the_release_makes_an_sbom_attests_provenance_and_audits_the_wheel_dependencies():
+    wf = _wf()
+    runs = " ".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
+    assert "cyclonedx-py" in runs and "sbom.cdx.json" in runs and "pip-audit" in runs
+    uploads = [s["with"]["name"] for s in wf["jobs"]["build"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
+    assert uploads == ["dist", "sbom"]
+    attest = wf["jobs"]["attest"]
+    assert attest["needs"] == "build" and attest["permissions"]["attestations"] == "write"
+    assert any(s.get("uses", "").startswith("actions/attest-build-provenance@") for s in attest["steps"])
+    audit = next(s for s in wf["jobs"]["build"]["steps"] if "pip-audit" in s.get("run", "") and "install" not in s.get("run", ""))
+    assert audit.get("continue-on-error") is True  # reported, never a reason to block a fix

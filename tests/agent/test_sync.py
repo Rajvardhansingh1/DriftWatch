@@ -186,3 +186,20 @@ def test_status_reports_pending_parked_and_the_last_error_in_plain_words(store, 
     st = w.status()
     assert st["pending"] == 1 and st["parked"] == {}
     assert "problem" in st["last_error"] and "boom" not in st["last_error"]
+
+
+def test_a_switched_off_ingest_is_a_temporary_problem_events_stay_and_nothing_is_parked(store, clock):
+    """The operator's kill switch takes away the right to call ingest_event: PostgREST answers 403 with SQLSTATE 42501.
+    That must read as 'try again later', never as a revoked key (which would park the project) or a bad event."""
+    refused = lambda request, calls: httpx.Response(403, json={"code": "42501", "message": "permission denied for function ingest_event"})  # noqa: E731
+    w, calls = worker(store, clock, refused)
+    for n in (1, 2, 3):
+        store.enqueue(P1, event(n))
+    w.drain_once()
+    assert store.pending_count() == 3 and store.counters().get("quarantined", 0) == 0
+    assert store.parked() == {}  # not a rejected key
+    assert w.status()["last_error"] and "problem" in w.status()["last_error"].lower()
+    clock.now += 3600  # later, with the switch back on, everything is delivered once
+    w2, calls2 = worker(store, clock, ok())
+    w2.drain_once()
+    assert store.pending_count() == 0 and len(calls2) == 3

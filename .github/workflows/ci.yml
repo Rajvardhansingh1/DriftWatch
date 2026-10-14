@@ -70,12 +70,34 @@ jobs:
       - run: python -m pytest tests/test_seal.py -q -p no:cacheprovider --confcutdir=tests/fixtures
         working-directory: .
       - run: npx tsc --noEmit
+      # high and critical advisories fail the build unless deploy/audit-exceptions.json accepts them (with a reason and an expiry)
+      - run: node scripts/audit-check.mjs
       - run: npm test
       - run: npm run build
         env:
           NEXT_PUBLIC_MONITOR_API_URL: http://localhost:8000
       # The local dashboard (shipped inside the CLI package) must keep building from the shared components.
       - run: npm run build:local
+
+  # The SQL is where the security lives (row-level security, definer functions, quotas, leases). These run the real
+  # migrations on an embedded Postgres with a Supabase-like shim: the SQL tests, the concurrency checks, the runner
+  # end to end, and the rehearsals of the incident runbooks and kill switches. Any FAIL line fails the job.
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install pgserver psycopg2-binary cryptography httpx numpy
+      - run: python scripts/run_sql_tests_local.py
+      - run: python scripts/test_quota_concurrency_local.py
+      - run: python scripts/test_runner_concurrency_local.py
+      - run: python scripts/test_runner_e2e_local.py
+      - run: python scripts/test_runbook_local.py
+      - run: python scripts/test_switches_local.py
 
   # The cloud runner opens users' provider keys: its pinned dependencies are checked against known vulnerabilities.
   audit-runner:
@@ -87,6 +109,10 @@ jobs:
           python-version: "3.11"
       - run: pip install pip-audit
       - run: pip-audit -r requirements-runner.txt
+      # What Render runs (the lean set; the full requirements.txt adds torch and is development-only). Audited as an
+      # installed environment, because the dependency resolver inside pip-audit cannot solve this set on its own.
+      - run: python -m venv /tmp/lean && /tmp/lean/bin/python -m pip install -q --upgrade pip setuptools && /tmp/lean/bin/python -m pip install -q -r requirements-lean.txt
+      - run: pip-audit --path /tmp/lean/lib/python3.11/site-packages
 
   secrets:
     runs-on: ubuntu-latest

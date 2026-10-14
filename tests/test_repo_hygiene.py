@@ -28,6 +28,8 @@ ANON_EXECUTABLE_ALLOWLIST = {
     "public.runner_write_signals",
     "public.runner_finish_job",
     "public.runner_health",
+    # Plan 9 (0014): aggregate sizes for the daily capacity alarm; same runner-secret gate, closed to signed-in users.
+    "public.ops_report",
 }
 
 

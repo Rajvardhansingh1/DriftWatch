@@ -18,7 +18,7 @@ Scope: the monitor API (`monitor/`), cloud auth and ingestion (`monitor/cloud/`,
 | Forged or expired token | HS256 signature + `aud=authenticated` + `exp` check | `monitor/cloud/auth.py` | Unit tested |
 | Privilege via email/metadata | Platform admin is an explicit env allowlist; org roles don't grant it | `monitor/admin/access.py` | Unit tested (admin-looking email gets 403) |
 | Self-assigned org role | No client INSERT on `organizations` / `organization_members`; creation via RPC only | `0001` | Policy-level; verified by the live test |
-| Replayed or duplicate events | Unique `(project_id, event_id)` constraint (409 → "duplicate") | `0004`, `monitor/cloud/supabase_store.py` | Mock-tested. Live constraint not exercised |
+| Replayed or duplicate events | Unique `(project_id, event_id)` constraint; `ingest_event` answers "duplicate" | `0004`, `0006` | SQL tests (`supabase/tests/0002_api_keys_ingest.sql`); events enter only through `ingest_event` (direct inserts closed in `0013`) |
 | Oversized or malformed payloads | Strict schema, unknown fields rejected, meta ≤ 4 KB, query text ≤ 500 chars | `monitor/cloud/ingest.py`, `monitor/main.py` | Unit tested |
 | Secret leakage in logs | Redaction filter for Bearer, JWT, Groq/Google/OpenAI-style keys, DB URLs | `monitor/logging_redaction.py` | Unit tested. Filter must be installed (`redaction.install()`) at startup. Not yet wired into `main.py` |
 | Secret leakage to evaluators | Environment scrubbed of secret-named variables | `monitor/plugins/runner.py` | Unit tested |
