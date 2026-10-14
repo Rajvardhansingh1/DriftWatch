@@ -354,3 +354,13 @@ def test_the_socket_path_stays_under_the_af_unix_limit_even_with_a_long_temp_dir
     monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
     monkeypatch.setattr(ipc.tempfile, "gettempdir", lambda: "/var/folders/" + "x" * 120 + "/T")
     assert len(os.fsencode(ipc.address_for(home))) <= 100  # sun_path holds 104 bytes on macOS, 108 on Linux
+
+
+def test_the_listener_queues_simultaneous_connections_instead_of_refusing_them():
+    # multiprocessing's default backlog is 1, which makes macOS refuse the second of several clients that connect at once
+    # (found as a lost message in the burst scenario). The agent must ask for a real queue.
+    import inspect
+
+    from driftwatch_llm.agent import ipc
+
+    assert "backlog=" in inspect.getsource(ipc.IpcServer.start)
